@@ -1,7 +1,10 @@
 """Client for the J-Quants API (https://jpx-jquants.com/).
 
-Handles authentication (refresh token -> id token) and provides helpers for
-fetching daily stock quotes and TOPIX index values.
+Supports two auth modes:
+  * V2 "API Key Method" (preferred): send the key in the `x-api-key` header. No
+    token exchange, no expiry. Enabled when JQUANTS_API_KEY is set.
+  * V1 token flow (fallback): mailaddress/password -> refreshToken -> idToken
+    (Bearer). Used when no API key is configured.
 """
 
 from __future__ import annotations
@@ -17,7 +20,7 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-BASE_URL = "https://api.jquants.com/v1"
+V1_BASE_URL = "https://api.jquants.com/v1"
 
 # J-Quants index code for TOPIX
 TOPIX_CODE = "0000"
@@ -33,13 +36,21 @@ class JQuantsClient:
         self._id_token_expiry: dt.datetime | None = None
         self._refresh_token: str | None = settings.jquants_refresh_token or None
 
+    @property
+    def _use_v2(self) -> bool:
+        return bool(settings.jquants_api_key)
+
+    @property
+    def base_url(self) -> str:
+        return settings.jquants_base_url if self._use_v2 else V1_BASE_URL
+
     def _fetch_refresh_token(self) -> str:
         if not settings.jquants_mail or not settings.jquants_password:
             raise JQuantsAuthError(
                 "JQUANTS_MAIL / JQUANTS_PASSWORD (or JQUANTS_REFRESH_TOKEN) is not configured"
             )
         resp = httpx.post(
-            f"{BASE_URL}/token/auth_user",
+            f"{V1_BASE_URL}/token/auth_user",
             json={"mailaddress": settings.jquants_mail, "password": settings.jquants_password},
             timeout=30,
         )
@@ -54,7 +65,7 @@ class JQuantsClient:
             self._refresh_token = self._fetch_refresh_token()
 
         resp = httpx.post(
-            f"{BASE_URL}/token/auth_refresh",
+            f"{V1_BASE_URL}/token/auth_refresh",
             params={"refreshtoken": self._refresh_token},
             timeout=30,
         )
@@ -62,7 +73,7 @@ class JQuantsClient:
             # refresh token expired - fetch a new one and retry once
             self._refresh_token = self._fetch_refresh_token()
             resp = httpx.post(
-                f"{BASE_URL}/token/auth_refresh",
+                f"{V1_BASE_URL}/token/auth_refresh",
                 params={"refreshtoken": self._refresh_token},
                 timeout=30,
             )
@@ -80,16 +91,39 @@ class JQuantsClient:
             return self._id_token
         return self._refresh_id_token()
 
+    def _headers(self) -> dict[str, str]:
+        if self._use_v2:
+            return {"x-api-key": settings.jquants_api_key}
+        return {"Authorization": f"Bearer {self._get_id_token()}"}
+
     def _get(self, path: str, params: dict[str, Any] | None = None) -> dict:
-        id_token = self._get_id_token()
         resp = httpx.get(
-            f"{BASE_URL}{path}",
+            f"{self.base_url}{path}",
             params=params,
-            headers={"Authorization": f"Bearer {id_token}"},
+            headers=self._headers(),
             timeout=30,
         )
         resp.raise_for_status()
         return resp.json()
+
+    def _get_paginated(self, path: str, params: dict[str, Any], key: str) -> list[dict]:
+        """GET that follows J-Quants `pagination_key` and concatenates `key` arrays."""
+        rows: list[dict] = []
+        p = dict(params)
+        for _ in range(200):  # safety bound
+            data = self._get(path, params=p)
+            rows.extend(data.get(key, []))
+            token = data.get("pagination_key")
+            if not token:
+                break
+            p["pagination_key"] = token
+        return rows
+
+    def fetch_listed_info(self, date: dt.date | None = None) -> pd.DataFrame:
+        """Fetch the listed-company master (code, name, market and sector codes)."""
+        params = {"date": date.isoformat()} if date else {}
+        rows = self._get_paginated("/listed/info", params, "info")
+        return pd.DataFrame(rows)
 
     def fetch_daily_quotes(self, code: str, start: dt.date, end: dt.date) -> pd.DataFrame:
         """Fetch daily OHLC quotes for a stock code. Returns a DataFrame indexed by date."""

@@ -12,7 +12,9 @@ class Settings(BaseSettings):
     jquants_mail: str = ""
     jquants_password: str = ""
     jquants_refresh_token: str = ""
-    jquants_api_key: str = ""  # paid API key (for sector/stock-level backtest)
+    jquants_api_key: str = ""  # V2 API key (x-api-key). Preferred when set.
+    # V2 base URL. Pro tier = https://api.jquants-pro.com/v2 ; standard V2 = https://api.jquants.com/v2
+    jquants_base_url: str = "https://api.jquants-pro.com/v2"
 
     # EDINET
     edinet_api_key: str = ""
