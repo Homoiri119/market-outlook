@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>セクター別バックテスト | 寄り付き前アウトルック</title>
+<style>
+  :root{--bg:#0f172a;--panel:#1e293b;--panel-2:#273449;--text:#e2e8f0;--muted:#94a3b8;--line:#334155;--up:#22c55e;--down:#ef4444;--accent:#38bdf8;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif;}
+  .wrap{max-width:1000px;margin:0 auto;padding:1.5rem 1.25rem 3rem;}
+  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem;}
+  header h1{font-size:1.15rem;margin:0;}
+  a.back{color:var(--accent);text-decoration:none;font-size:.85rem;}
+  .sub{color:var(--muted);font-size:.82rem;margin-bottom:1rem;}
+  section.card{background:var(--panel);border-radius:16px;padding:1.25rem 1.5rem;margin-top:1rem;}
+  .bar-row{display:flex;align-items:center;gap:.6rem;margin:.4rem 0;font-size:.85rem;}
+  .bar-row .nm{width:12rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .bar-track{flex:1;background:var(--panel-2);border-radius:6px;height:20px;position:relative;}
+  .bar-fill{height:100%;border-radius:6px;}
+  .bar-row .val{width:3.5rem;text-align:right;font-weight:700;}
+  .bar-row .strat{width:6rem;text-align:right;color:var(--muted);}
+  .strat.pos{color:var(--up);}.strat.neg{color:var(--down);}
+  .muted{color:var(--muted);}
+  .disc{font-size:.75rem;color:var(--muted);line-height:1.6;}
+  .empty{color:var(--muted);padding:2rem 0;text-align:center;}
+  .hdr{display:flex;gap:.6rem;font-size:.72rem;color:var(--muted);margin-bottom:.3rem;}
+  .hdr .nm{width:12rem;}.hdr .mid{flex:1;}.hdr .val{width:3.5rem;text-align:right;}.hdr .strat{width:6rem;text-align:right;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🏭 セクター別バックテスト(S17・ウォークフォワード)</h1>
+    <a class="back" href="./backtest.html">← 指数バックテストへ</a>
+  </header>
+  <div class="sub" id="sub"></div>
+  <div id="content"><div class="empty">読み込み中...</div></div>
+</div>
+<script>
+function pct(v,d=1){return v==null?"N/A":(v*100).toFixed(d)+"%";}
+
+function render(bt){
+  document.getElementById("sub").textContent =
+    `${bt.classification} ・ 検証 ${bt.start}〜${bt.end} ・ 大型株ユニバース ${bt.universe_size}銘柄 ・ ` +
+    `予測=寄り付きギャップ / 売買=寄り建て→引け ・ 学習は各時点それ以前のみ(先読みなし)`;
+  const secs = bt.sectors || [];
+  if(!secs.length){document.getElementById("content").innerHTML=`<div class="empty">データがありません。</div>`;return;}
+  const rows = secs.map(s=>{
+    const w = Math.round(s.hit_rate*100);
+    const color = s.hit_rate>=0.55?"var(--up)":s.hit_rate<0.5?"var(--down)":"var(--muted)";
+    const sc = s.strategy_return>=0?"pos":"neg";
+    return `<div class="bar-row">
+      <span class="nm" title="${s.name}">${s.name}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${w}%;background:${color}"></div></div>
+      <span class="val">${w}%</span>
+      <span class="strat ${sc}">${pct(s.strategy_return,0)}</span>
+    </div>`;
+  }).join("");
+  document.getElementById("content").innerHTML =
+    `<section class="card">
+       <h2 style="font-size:.95rem;color:var(--muted);margin:0 0 .5rem">寄り付き方向 的中率(セクター別・高い順)</h2>
+       <div class="hdr"><span class="nm">セクター</span><span class="mid"></span><span class="val">的中率</span><span class="strat">戦略(寄→引)</span></div>
+       ${rows}
+     </section>
+     <section class="card"><div class="disc">
+       各S17セクターについて、大型株(TOPIX Core30+Large70相当)を時価総額加重で集計したセクター系列を作成し、
+       米国終値の特徴量から翌営業日の寄り付きギャップを予測(ウォークフォワード=先読みなし)。的中率はギャップ方向、
+       戦略は寄り付きで建て大引けで手仕舞う(寄→引)取引可能な損益(ギャップ自体は約定不可)。J-Quants V2データ使用。
+       配当・手数料・スリッページ未考慮。過去の成績は将来を保証しません。
+     </div></section>`;
+}
+
+if(window.__SBT__){ render(window.__SBT__); }
+else {
+  fetch("./sector_backtest.json").then(r=>r.ok?r.json():Promise.reject(r.status)).then(render)
+    .catch(()=>{document.getElementById("content").innerHTML=`<div class="empty">セクター別バックテスト結果がまだありません(J-Quantsワークフローの実行後に表示)。</div>`;});
+}
+</script>
+</body>
+</html>

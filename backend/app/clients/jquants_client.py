@@ -94,12 +94,13 @@ class JQuantsClient:
         return self._refresh_id_token()
 
     def _headers(self) -> dict[str, str]:
-        # Prefer the confirmed mail/password token flow; fall back to x-api-key.
-        if self._has_token_creds:
-            return {"Authorization": f"Bearer {self._get_id_token()}"}
+        # Confirmed working: V2 x-api-key. Fall back to the V1 token flow if only
+        # mail/password are configured.
         if settings.jquants_api_key:
             return {"x-api-key": settings.jquants_api_key}
-        raise JQuantsAuthError("No J-Quants credentials configured")
+        if self._has_token_creds:
+            return {"Authorization": f"Bearer {self._get_id_token()}"}
+        raise JQuantsAuthError("No J-Quants credentials configured (set JQUANTS_API_KEY)")
 
     def _get(self, path: str, params: dict[str, Any] | None = None) -> dict:
         resp = httpx.get(
@@ -125,52 +126,47 @@ class JQuantsClient:
         return rows
 
     def fetch_listed_info(self, date: dt.date | None = None) -> pd.DataFrame:
-        """Fetch the listed-company master (code, name, market and sector codes)."""
+        """Fetch the listed-company master via V2 /equities/master.
+        Columns include: Code, CoName, CoNameEn, Mkt/MktNm (market), S17/S17Nm and
+        S33/S33Nm (17- and 33-sector code/name), ScaleCat (TOPIX size category)."""
         params = {"date": date.isoformat()} if date else {}
-        rows = self._get_paginated("/listed/info", params, "info")
+        rows = self._get_paginated("/equities/master", params, "data")
         return pd.DataFrame(rows)
 
     def fetch_daily_quotes(self, code: str, start: dt.date, end: dt.date) -> pd.DataFrame:
-        """Fetch daily OHLC quotes for a stock code. Returns a DataFrame indexed by date."""
-        data = self._get(
-            "/prices/daily_quotes",
-            params={"code": code, "from": start.isoformat(), "to": end.isoformat()},
+        """Fetch split-adjusted daily OHLC for a stock via V2 /equities/bars/daily.
+        Uses adjusted prices (AdjO/AdjH/AdjL/AdjC). Returns a DataFrame indexed by date."""
+        rows = self._get_paginated(
+            "/equities/bars/daily",
+            {"code": code, "from": start.isoformat(), "to": end.isoformat()},
+            "data",
         )
-        quotes = data.get("daily_quotes", [])
-        if not quotes:
-            return pd.DataFrame()
-
-        df = pd.DataFrame(quotes)
-        df["Date"] = pd.to_datetime(df["Date"]).dt.date
-        df = df.rename(
-            columns={
-                "Date": "date",
-                "Open": "open",
-                "High": "high",
-                "Low": "low",
-                "Close": "close",
-            }
-        )
-        df = df[["date", "open", "high", "low", "close"]].dropna(subset=["close"])
-        df = df.set_index("date").sort_index()
-        df["return_pct"] = df["close"].pct_change()
-        return df
-
-    def fetch_topix_history(self, start: dt.date, end: dt.date) -> pd.DataFrame:
-        """Fetch TOPIX index history. Returns a DataFrame indexed by date with close/return_pct."""
-        data = self._get(
-            "/indices",
-            params={"code": TOPIX_CODE, "from": start.isoformat(), "to": end.isoformat()},
-        )
-        rows = data.get("indices", [])
         if not rows:
             return pd.DataFrame()
 
         df = pd.DataFrame(rows)
-        df["Date"] = pd.to_datetime(df["Date"]).dt.date
-        df = df.rename(columns={"Date": "date", "Close": "close"})
-        df = df[["date", "close"]].dropna(subset=["close"])
-        df = df.set_index("date").sort_index()
+        df["date"] = pd.to_datetime(df["Date"]).dt.date
+        df = df.rename(columns={"AdjO": "open", "AdjH": "high", "AdjL": "low", "AdjC": "close",
+                                "AdjVo": "volume", "MktCap": "mkt_cap"})
+        keep = [c for c in ["date", "open", "high", "low", "close", "volume", "mkt_cap"] if c in df.columns]
+        df = df[keep].dropna(subset=["close"]).set_index("date").sort_index()
+        df["return_pct"] = df["close"].pct_change()
+        return df
+
+    def fetch_topix_history(self, start: dt.date, end: dt.date) -> pd.DataFrame:
+        """Fetch TOPIX index history via V2 /indices/bars/daily/topix (cols O/H/L/C)."""
+        rows = self._get_paginated(
+            "/indices/bars/daily/topix",
+            {"from": start.isoformat(), "to": end.isoformat()},
+            "data",
+        )
+        if not rows:
+            return pd.DataFrame()
+
+        df = pd.DataFrame(rows)
+        df["date"] = pd.to_datetime(df["Date"]).dt.date
+        df = df.rename(columns={"O": "open", "H": "high", "L": "low", "C": "close"})
+        df = df[["date", "close"]].dropna(subset=["close"]).set_index("date").sort_index()
         df["return_pct"] = df["close"].pct_change()
         return df
 
