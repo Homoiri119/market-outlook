@@ -117,76 +117,69 @@ def _get(base: str, path: str, params: dict, headers: dict) -> tuple[int, dict |
         return r.status_code, r.text[:200]
 
 
+V2_HOSTS = ["https://api.jquants.com/v2", "https://api.jquants-pro.com/v2"]
+
+
+def _summarize(body) -> str:
+    if not isinstance(body, dict):
+        return str(body)[:80]
+    parts = []
+    for k, v in body.items():
+        if k == "pagination_key":
+            continue
+        if isinstance(v, list):
+            cols = sorted(v[0].keys()) if v and isinstance(v[0], dict) else []
+            parts.append(f"{k}[{len(v)}] cols={cols}")
+        else:
+            parts.append(f"{k}={repr(v)[:50]}")
+    return " ; ".join(parts) if parts else "(empty)"
+
+
 def main() -> int:
-    # --- Preferred: mail/password token flow (the chosen method) ---
-    working_base = None
-    id_token = None
-    if MAIL and PASSWORD:
-        print("=== Mail/password token flow ===")
-        _cred_diagnostics()
-        for base in TOKEN_FLOW_BASES:
-            ok, idt = try_token_flow(base)
-            print()
-            if ok:
-                working_base, id_token = base, idt
-                break
-    else:
-        print("JQUANTS_MAIL / JQUANTS_PASSWORD not set — skipping token flow.\n")
-
-    # --- Fallback probe: API-key styles (kept for diagnostics) ---
-    if not working_base and API_KEY:
-        print("Key diagnostics:", _fingerprint(RAW_KEY))
-        print("=== API-key probe ===")
-        for base in CANDIDATE_BASE_URLS:
-            for style_name, hfn in AUTH_STYLES:
-                status, body = _get(base, "/listed/info", {}, hfn(API_KEY))
-                n = len(body.get("info", [])) if isinstance(body, dict) else 0
-                msg = body.get("message", "")[:60] if isinstance(body, dict) else str(body)[:60]
-                print(f"[{base}] [{style_name}] -> HTTP {status}, rows={n}  {msg}")
-                if status == 200 and n > 0 and working_base is None:
-                    working_base = base
-            print()
-
-    if not working_base:
-        print("FAIL: Could not authenticate with mail/password token flow nor API key.")
-        print("→ Verify JQUANTS_MAIL/JQUANTS_PASSWORD are correct, and whether the account is")
-        print("  standard (api.jquants.com/v1) or Pro (api.jquants-pro.com/v2).")
-        return 1
-
-    print(f"WORKING BASE URL: {working_base}\n")
-
-    def get(path, params):
-        headers = {"Authorization": f"Bearer {id_token}"} if id_token else {"x-api-key": API_KEY}
-        return _get(working_base, path, params, headers)
-
-    # Inspect the listed/info schema (which sector fields are present).
-    _, info = get("/listed/info", {})
-    sample = (info.get("info") or [{}])[0] if isinstance(info, dict) else {}
-    print("listed/info sample fields present:")
-    for f in SECTOR_FIELDS:
-        print(f"  {f:18s}: {'YES' if f in sample else 'no'}  {repr(sample.get(f))[:40]}")
-
-    # Daily quotes for one liquid name (Toyota 7203 / 72030).
     end = dt.date.today()
     start = end - dt.timedelta(days=20)
-    for code in ("7203", "72030"):
-        s, body = get("/prices/daily_quotes",
-                      {"code": code, "from": start.isoformat(), "to": end.isoformat()})
-        n = len(body.get("daily_quotes", [])) if isinstance(body, dict) else 0
-        print(f"\n/prices/daily_quotes code={code} -> HTTP {s}, rows={n}")
-        if n:
-            print("  columns:", sorted((body["daily_quotes"][0]).keys()))
-            break
+    d1, d2 = start.isoformat(), end.isoformat()
 
-    # Index endpoint (TOPIX) — may be premium.
-    for path, params in [("/indices", {"code": "0000", "from": start.isoformat(), "to": end.isoformat()}),
-                         ("/indices/topix", {"from": start.isoformat(), "to": end.isoformat()})]:
-        s, body = get(path, params)
-        keys = [k for k in (body.keys() if isinstance(body, dict) else []) if k != "pagination_key"]
-        print(f"\n{path} -> HTTP {s}, keys={keys}")
+    print("Key diagnostics:", _fingerprint(RAW_KEY), "\n")
 
-    print("\nPASS: connectivity OK. Paste this output (no secrets shown) so the sector/stock backtest can be built.")
-    return 0
+    # V2 endpoint paths differ from V1. Probe the documented V2 endpoint first to
+    # confirm the key, then discover the paths we need (listed info, quotes, indices).
+    probes = [
+        ("/fins/details", {"code": "86970", "date": "20230130"}),   # documented V2 example (key check)
+        ("/listed/info", {}),
+        ("/listed/info", {"date": d2}),
+        ("/prices/daily_quotes", {"code": "7203", "from": d1, "to": d2}),
+        ("/prices/daily_quotes", {"code": "72030", "from": d1, "to": d2}),
+        ("/indices/topix", {"from": d1, "to": d2}),
+        ("/indices", {"code": "0028", "from": d1, "to": d2}),
+        ("/markets/sector", {}),
+    ]
+
+    working_host = None
+    for host in V2_HOSTS:
+        print(f"=== {host}  (x-api-key) ===")
+        for path, params in probes:
+            status, body = _get(host, path, params, {"x-api-key": API_KEY})
+            print(f"  {path:26s} {params if params else '':<40} -> HTTP {status}  {_summarize(body)[:160]}")
+            if status == 200 and path == "/fins/details" and working_host is None:
+                working_host = host
+        print()
+
+    # Also try the mail/password token flow (in case the account still supports it).
+    if MAIL and PASSWORD:
+        print("=== Mail/password token flow (secondary) ===")
+        _cred_diagnostics()
+        for base in TOKEN_FLOW_BASES:
+            try_token_flow(base)
+            print()
+
+    if working_host:
+        print(f"PASS: key works on {working_host} via x-api-key. "
+              f"Paste this whole output so the correct V2 paths + sector fields can be wired.")
+        return 0
+    print("FAIL: key did not authenticate on /fins/details on any V2 host.")
+    print("→ Paste this output; if even /fins/details is 401/403, the dashboard's exact sample is needed.")
+    return 1
 
 
 if __name__ == "__main__":
