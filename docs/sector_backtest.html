@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>セクター別バックテスト | 寄り付き前アウトルック</title>
+<style>
+  :root{--bg:#0f172a;--panel:#1e293b;--panel-2:#273449;--text:#e2e8f0;--muted:#94a3b8;--line:#334155;--up:#22c55e;--down:#ef4444;--accent:#38bdf8;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif;}
+  .wrap{max-width:1000px;margin:0 auto;padding:1.5rem 1.25rem 3rem;}
+  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem;}
+  header h1{font-size:1.15rem;margin:0;}
+  a.back{color:var(--accent);text-decoration:none;font-size:.85rem;}
+  .sub{color:var(--muted);font-size:.82rem;margin-bottom:1rem;}
+  section.card{background:var(--panel);border-radius:16px;padding:1.25rem 1.5rem;margin-top:1rem;}
+  .bar-row{display:flex;align-items:center;gap:.6rem;margin:.4rem 0;font-size:.85rem;}
+  .bar-row .nm{width:12rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .bar-track{flex:1;background:var(--panel-2);border-radius:6px;height:20px;position:relative;}
+  .bar-fill{height:100%;border-radius:6px;}
+  .bar-row .val{width:3.5rem;text-align:right;font-weight:700;}
+  .bar-row .strat{width:6rem;text-align:right;color:var(--muted);}
+  .strat.pos{color:var(--up);}.strat.neg{color:var(--down);}
+  .muted{color:var(--muted);}
+  .disc{font-size:.75rem;color:var(--muted);line-height:1.6;}
+  .empty{color:var(--muted);padding:2rem 0;text-align:center;}
+  .hdr{display:flex;gap:.6rem;font-size:.72rem;color:var(--muted);margin-bottom:.3rem;}
+  .hdr .nm{width:12rem;}.hdr .mid{flex:1;}.hdr .val{width:3.5rem;text-align:right;}.hdr .strat{width:6rem;text-align:right;}
+</style>
+<script>window.__SBT__ = {"level": "sector", "classification": "S17 (17 sectors)", "years": 4.0, "universe_size": 99, "start": "2022-06-28", "end": "2026-08-21", "sectors": [{"n_days": 840, "hit_rate": 0.7321428571428571, "mae": 0.007986824746983584, "strategy_return": -0.12256961947135414, "code": "9", "name": "電機・精密", "n_stocks": 19}, {"n_days": 840, "hit_rate": 0.7214285714285714, "mae": 0.0079938157439568, "strategy_return": -0.19858935647133635, "code": "8", "name": "機械", "n_stocks": 6}, {"n_days": 840, "hit_rate": 0.7011904761904761, "mae": 0.0060611181996455795, "strategy_return": 0.022846837832262157, "code": "10", "name": "情報通信・サービスその他", "n_stocks": 13}, {"n_days": 840, "hit_rate": 0.6880952380952381, "mae": 0.006635843092331332, "strategy_return": -0.2066685409674427, "code": "4", "name": "素材・化学", "n_stocks": 6}, {"n_days": 840, "hit_rate": 0.6833333333333333, "mae": 0.01050672541669012, "strategy_return": 0.10580874056828127, "code": "7", "name": "鉄鋼・非鉄", "n_stocks": 3}, {"n_days": 840, "hit_rate": 0.669047619047619, "mae": 0.007446112674060723, "strategy_return": -0.06214885551060778, "code": "13", "name": "商社・卸売", "n_stocks": 6}, {"n_days": 840, "hit_rate": 0.6511904761904762, "mae": 0.00844731536253214, "strategy_return": -0.4290471872454752, "code": "6", "name": "自動車・輸送機", "n_stocks": 7}, {"n_days": 840, "hit_rate": 0.6440476190476191, "mae": 0.008260096234253778, "strategy_return": -0.2080464068402912, "code": "17", "name": "不動産", "n_stocks": 3}, {"n_days": 840, "hit_rate": 0.6285714285714286, "mae": 0.0065585743277692225, "strategy_return": -0.09212962444846051, "code": "14", "name": "小売", "n_stocks": 3}, {"n_days": 840, "hit_rate": 0.6261904761904762, "mae": 0.008037831081975675, "strategy_return": -0.09129078435912585, "code": "16", "name": "金融（除く銀行）", "n_stocks": 8}, {"n_days": 840, "hit_rate": 0.6166666666666667, "mae": 0.008244141223792118, "strategy_return": 0.48206624562656386, "code": "15", "name": "銀行", "n_stocks": 6}, {"n_days": 840, "hit_rate": 0.6166666666666667, "mae": 0.0058433610656737495, "strategy_return": -0.2365489611006628, "code": "3", "name": "建設・資材", "n_stocks": 2}, {"n_days": 840, "hit_rate": 0.5928571428571429, "mae": 0.008593490073404014, "strategy_return": 0.31022723741779323, "code": "2", "name": "エネルギー資源", "n_stocks": 1}, {"n_days": 840, "hit_rate": 0.5892857142857143, "mae": 0.007274359407122077, "strategy_return": 0.02475279236995198, "code": "5", "name": "医薬品", "n_stocks": 6}, {"n_days": 840, "hit_rate": 0.5773809523809523, "mae": 0.0048822660293692, "strategy_return": -0.010914989364171457, "code": "1", "name": "食品", "n_stocks": 4}, {"n_days": 840, "hit_rate": 0.5654761904761905, "mae": 0.004856882888216825, "strategy_return": -0.22614030204396085, "code": "12", "name": "運輸・物流", "n_stocks": 6}], "generated_at": "2026-08-24 08:49 JST"};</script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🏭 セクター別バックテスト(S17・ウォークフォワード)</h1>
+    <a class="back" href="./backtest.html">← 指数バックテストへ</a>
+  </header>
+  <div class="sub" id="sub"></div>
+  <div id="content"><div class="empty">読み込み中...</div></div>
+</div>
+<script>
+function pct(v,d=1){return v==null?"N/A":(v*100).toFixed(d)+"%";}
+
+function render(bt){
+  document.getElementById("sub").textContent =
+    `${bt.classification} ・ 検証 ${bt.start}〜${bt.end} ・ 大型株ユニバース ${bt.universe_size}銘柄 ・ ` +
+    `予測=寄り付きギャップ / 売買=寄り建て→引け ・ 学習は各時点それ以前のみ(先読みなし)`;
+  const secs = bt.sectors || [];
+  if(!secs.length){document.getElementById("content").innerHTML=`<div class="empty">データがありません。</div>`;return;}
+  const rows = secs.map(s=>{
+    const w = Math.round(s.hit_rate*100);
+    const color = s.hit_rate>=0.55?"var(--up)":s.hit_rate<0.5?"var(--down)":"var(--muted)";
+    const sc = s.strategy_return>=0?"pos":"neg";
+    return `<div class="bar-row">
+      <span class="nm" title="${s.name}">${s.name}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${w}%;background:${color}"></div></div>
+      <span class="val">${w}%</span>
+      <span class="strat ${sc}">${pct(s.strategy_return,0)}</span>
+    </div>`;
+  }).join("");
+  document.getElementById("content").innerHTML =
+    `<section class="card">
+       <h2 style="font-size:.95rem;color:var(--muted);margin:0 0 .5rem">寄り付き方向 的中率(セクター別・高い順)</h2>
+       <div class="hdr"><span class="nm">セクター</span><span class="mid"></span><span class="val">的中率</span><span class="strat">戦略(寄→引)</span></div>
+       ${rows}
+     </section>
+     <section class="card"><div class="disc">
+       各S17セクターについて、大型株(TOPIX Core30+Large70相当)を時価総額加重で集計したセクター系列を作成し、
+       米国終値の特徴量から翌営業日の寄り付きギャップを予測(ウォークフォワード=先読みなし)。的中率はギャップ方向、
+       戦略は寄り付きで建て大引けで手仕舞う(寄→引)取引可能な損益(ギャップ自体は約定不可)。J-Quants V2データ使用。
+       配当・手数料・スリッページ未考慮。過去の成績は将来を保証しません。
+     </div></section>`;
+}
+
+if(window.__SBT__){ render(window.__SBT__); }
+else {
+  fetch("./sector_backtest.json").then(r=>r.ok?r.json():Promise.reject(r.status)).then(render)
+    .catch(()=>{document.getElementById("content").innerHTML=`<div class="empty">セクター別バックテスト結果がまだありません(J-Quantsワークフローの実行後に表示)。</div>`;});
+}
+</script>
+</body>
+</html>
