@@ -142,28 +142,37 @@ def main() -> int:
 
     print("Key diagnostics:", _fingerprint(RAW_KEY), "\n")
 
-    # V2 endpoint paths differ from V1. Probe the documented V2 endpoint first to
-    # confirm the key, then discover the paths we need (listed info, quotes, indices).
+    # Confirmed V2 paths (renamed from V1). /fins/details is the key-validity canary
+    # (403 "not available on your subscription" = key OK but endpoint not in plan).
     probes = [
-        ("/fins/details", {"code": "86970", "date": "20230130"}),   # documented V2 example (key check)
-        ("/listed/info", {}),
-        ("/listed/info", {"date": d2}),
-        ("/prices/daily_quotes", {"code": "7203", "from": d1, "to": d2}),
-        ("/prices/daily_quotes", {"code": "72030", "from": d1, "to": d2}),
-        ("/indices/topix", {"from": d1, "to": d2}),
-        ("/indices", {"code": "0028", "from": d1, "to": d2}),
-        ("/markets/sector", {}),
+        ("/fins/details", {"code": "86970", "date": "20230130"}),        # key canary
+        ("/equities/master", {}),                                        # listed info + sectors
+        ("/equities/bars/daily", {"code": "7203", "from": d1, "to": d2}),  # daily quotes
+        ("/indices/bars/daily/topix", {"from": d1, "to": d2}),           # TOPIX
+        ("/indices/bars/daily", {"code": "0028", "from": d1, "to": d2}),  # sector index (electric appliances?)
     ]
 
     working_host = None
-    for host in V2_HOSTS:
+    for host in ["https://api.jquants.com/v2"]:
         print(f"=== {host}  (x-api-key) ===")
         for path, params in probes:
             status, body = _get(host, path, params, {"x-api-key": API_KEY})
             pstr = str(params) if params else ""
-            print(f"  {path:26s} {pstr:<40} -> HTTP {status}  {_summarize(body)[:160]}")
-            if status == 200 and path == "/fins/details" and working_host is None:
+            print(f"  {path:28s} {pstr:<38} -> HTTP {status}  {_summarize(body)[:200]}")
+            # Key is valid if any endpoint authenticates (200) or reports a plan limit.
+            msg = body.get("message", "") if isinstance(body, dict) else ""
+            if working_host is None and (status == 200 or "subscription" in msg):
                 working_host = host
+        print()
+
+    # Show which sector fields appear in /equities/master.
+    s, body = _get("https://api.jquants.com/v2", "/equities/master", {}, {"x-api-key": API_KEY})
+    if isinstance(body, dict):
+        arr = next((v for v in body.values() if isinstance(v, list)), [])
+        sample = arr[0] if arr else {}
+        if sample:
+            print("equities/master ALL fields:", sorted(sample.keys()))
+            print("sector-related:", {k: sample[k] for k in sample if "ector" in k or "arket" in k or "17" in k or "33" in k})
         print()
 
     # Also try the mail/password token flow (in case the account still supports it).
