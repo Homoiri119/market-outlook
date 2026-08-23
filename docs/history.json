@@ -8,8 +8,8 @@
 },
 {
 "date": "2026-08-23",
-"direction": "FLAT",
-"expected_move": 0.0006953345702645811,
+"direction": "UP",
+"expected_move": 0.0023711481499755585,
 "actual_move": null,
 "hit": null
 }
