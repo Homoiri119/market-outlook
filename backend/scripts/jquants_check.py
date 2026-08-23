@@ -160,7 +160,8 @@ def main() -> int:
         print(f"=== {host}  (x-api-key) ===")
         for path, params in probes:
             status, body = _get(host, path, params, {"x-api-key": API_KEY})
-            print(f"  {path:26s} {params if params else '':<40} -> HTTP {status}  {_summarize(body)[:160]}")
+            pstr = str(params) if params else ""
+            print(f"  {path:26s} {pstr:<40} -> HTTP {status}  {_summarize(body)[:160]}")
             if status == 200 and path == "/fins/details" and working_host is None:
                 working_host = host
         print()
