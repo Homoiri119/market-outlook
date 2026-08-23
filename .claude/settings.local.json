@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/yukito/Desktop/株式AI活用/**)",
+      "Bash(ls -la)",
+      "Bash(ls -la jquant_API_data)",
+      "Bash(cat .env.example)",
+      "Bash(ls .env)",
+      "Bash(python -c \"import pandas as pd; p=pd.read_pickle\\('jquant_API_data/jquants_bulk_cache.pkl'\\); d=p['data']; print\\('date',p['date']\\); print\\('shape',d.shape\\); print\\('cols',list\\(d.columns\\)[:30]\\); print\\(d[['Code','Date']].head\\(2\\).to_dict\\(\\)\\)\")",
+      "Bash(python -c ' *)"
+    ]
+  }
+}

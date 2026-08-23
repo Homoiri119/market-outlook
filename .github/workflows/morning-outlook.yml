@@ -1,0 +1,49 @@
+name: Morning Outlook
+
+# 08:00 JST(東京市場が開く9:00の直前)に実行。
+# GitHub の cron は UTC。08:00 JST = 前日 23:00 UTC。
+# 月〜金(JST)= 日〜木(UTC)= 0-4。
+on:
+  schedule:
+    - cron: "0 23 * * 0-4"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+concurrency:
+  group: morning-outlook
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Compute outlook, notify Discord, build dashboard
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python backend/scripts/run_cloud.py
+
+      - name: Commit updated dashboard
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "chore: morning outlook $(date -u +%Y-%m-%d)"
+            git push
+          fi
