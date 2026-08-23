@@ -304,6 +304,8 @@ def compute_morning_outlook(db: Session, date: dt.date | None = None) -> Morning
     record.us_detail = us_detail
     struct = us_market_struct(us, extra)
     record.us_market_json = json.dumps(struct, ensure_ascii=False) if struct else None
+    sectors = analytics.sector_signals(struct)
+    record.sectors_json = json.dumps(sectors, ensure_ascii=False) if sectors else None
     record.narrative = narrative
     record.expected_range_low = range_low
     record.expected_range_high = range_high

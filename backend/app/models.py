@@ -74,6 +74,8 @@ class MorningOutlook(Base):
     us_detail: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     # JSON-serialized structured US market snapshot (returns/levels) for rich display.
     us_market_json: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    # JSON-serialized per-sector tailwind/headwind signals.
+    sectors_json: Mapped[str | None] = mapped_column(String(4000), nullable=True)
     narrative: Mapped[str | None] = mapped_column(String(4000), nullable=True)
     # Expected opening range (fractions + Nikkei levels).
     expected_range_low: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -97,6 +99,18 @@ class MorningOutlook(Base):
             return None
         try:
             return json.loads(self.us_market_json)
+        except (ValueError, TypeError):
+            return None
+
+    @property
+    def sectors(self) -> list | None:
+        """Parsed per-sector tailwind/headwind signals (or None)."""
+        import json
+
+        if not self.sectors_json:
+            return None
+        try:
+            return json.loads(self.sectors_json)
         except (ValueError, TypeError):
             return None
 

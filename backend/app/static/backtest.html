@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>バックテスト | 寄り付き前アウトルック</title>
+<style>
+  :root{--bg:#0f172a;--panel:#1e293b;--panel-2:#273449;--text:#e2e8f0;--muted:#94a3b8;--line:#334155;--up:#22c55e;--up-bg:rgba(34,197,94,.12);--down:#ef4444;--down-bg:rgba(239,68,68,.12);--accent:#38bdf8;--amber:#f59e0b;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1000px;margin:0 auto;padding:1.5rem 1.25rem 3rem;}
+  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:1rem;}
+  header h1{font-size:1.15rem;margin:0;}
+  a.back{color:var(--accent);text-decoration:none;font-size:.85rem;}
+  .sub{color:var(--muted);font-size:.82rem;margin-bottom:1rem;}
+  section.card{background:var(--panel);border-radius:16px;padding:1.25rem 1.5rem;margin-top:1.25rem;}
+  section.card h2{font-size:.95rem;margin:0 0 .75rem;color:var(--muted);font-weight:600;}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:.75rem;}
+  .stat{background:var(--panel-2);border-radius:12px;padding:.8rem .9rem;}
+  .stat .k{font-size:.72rem;color:var(--muted);display:block;}
+  .stat .v{font-size:1.5rem;font-weight:800;}
+  .stat .v.pos{color:var(--up);}.stat .v.neg{color:var(--down);}
+  table{width:100%;border-collapse:collapse;}
+  th,td{text-align:right;padding:.5rem .6rem;border-bottom:1px solid var(--line);font-size:.88rem;}
+  th:first-child,td:first-child{text-align:left;}
+  td.pos{color:var(--up);}td.neg{color:var(--down);}
+  svg{width:100%;display:block;}
+  .axis{stroke:var(--line);stroke-width:1;}
+  .zero{stroke:var(--muted);stroke-dasharray:4 4;opacity:.5;}
+  .glabel{fill:var(--muted);font-size:10px;}
+  .legend{display:flex;gap:.9rem;font-size:.78rem;color:var(--muted);flex-wrap:wrap;}
+  .legend .lg{display:flex;align-items:center;gap:.3rem;}
+  .legend .sw{width:16px;height:3px;border-radius:2px;display:inline-block;}
+  .bar-row{display:flex;align-items:center;gap:.6rem;margin:.35rem 0;font-size:.82rem;}
+  .bar-row .yr{width:3rem;color:var(--muted);}
+  .bar-track{flex:1;background:var(--panel-2);border-radius:6px;height:18px;position:relative;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:6px;}
+  .bar-row .val{width:3rem;text-align:right;font-weight:700;}
+  .muted{color:var(--muted);}
+  .disc{font-size:.75rem;color:var(--muted);line-height:1.6;}
+  .empty{color:var(--muted);padding:2rem 0;text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>📊 バックテスト(日経225・ウォークフォワード)</h1>
+    <a class="back" href="./index.html">← ダッシュボードに戻る</a>
+  </header>
+  <div class="sub" id="sub"></div>
+  <div id="content"><div class="empty">読み込み中...</div></div>
+</div>
+<script>
+function pct(v,d=1){return v==null?"N/A":(v*100).toFixed(d)+"%";}
+function num(v,d=2){return v==null?"N/A":v.toFixed(d);}
+function cls(v){return v==null?"":v>=0?"pos":"neg";}
+
+function stat(k,v,klass=""){return `<div class="stat"><span class="k">${k}</span><span class="v ${klass}">${v}</span></div>`;}
+
+function renderStrategyTable(s){
+  const rows=[
+    ["予測「上」→寄り建て・引け手仕舞い(ロング/フラット)","long_flat"],
+    ["予測方向で寄り建て・引け手仕舞い(ロング/ショート)","long_short"],
+    ["バイ&ホールド(日経225・終値ベース)","buy_hold"],
+  ];
+  const body=rows.map(([label,key])=>{
+    const m=s[key]||{};
+    return `<tr>
+      <td>${label}</td>
+      <td class="${cls(m.total_return)}">${pct(m.total_return)}</td>
+      <td class="${cls(m.cagr)}">${pct(m.cagr)}</td>
+      <td class="${cls(m.mdd)}">${pct(m.mdd)}</td>
+      <td>${m.sharpe==null?"N/A":m.sharpe.toFixed(2)}</td>
+    </tr>`;
+  }).join("");
+  return `<section class="card"><h2>戦略パフォーマンス比較</h2>
+    <div style="overflow-x:auto"><table>
+      <thead><tr><th>戦略</th><th>累積リターン</th><th>年率(CAGR)</th><th>最大ドローダウン</th><th>シャープ</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table></div></section>`;
+}
+
+function renderEquity(equity){
+  if(!equity||equity.length<2) return "";
+  const W=960,H=280,padL=48,padR=16,padT=16,padB=28;
+  const series=[["lf","予測ロング&フラット","var(--accent)"],["ls","予測ロング&ショート","var(--amber)"],["bh","バイ&ホールド","#94a3b8"]];
+  let min=Infinity,max=-Infinity;
+  equity.forEach(p=>series.forEach(([k])=>{min=Math.min(min,p[k]);max=Math.max(max,p[k]);}));
+  const padV=(max-min)*0.08||0.1;min-=padV;max+=padV;
+  const x=i=>padL+(i*(W-padL-padR))/(equity.length-1);
+  const y=v=>padT+(H-padT-padB)*(1-(v-min)/(max-min));
+  const lines=series.map(([k,,color])=>{
+    const pts=equity.map((p,i)=>`${x(i)},${y(p[k])}`).join(" ");
+    return `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2"/>`;
+  }).join("");
+  const oneY=y(1);
+  const legend=series.map(([,label,color])=>`<span class="lg"><span class="sw" style="background:${color}"></span>${label}</span>`).join("");
+  return `<section class="card">
+    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem"><h2 style="margin:0">資産曲線(1.0スタート・配当/手数料除く)</h2><div class="legend">${legend}</div></div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+      <line class="axis" x1="${padL}" y1="${padT}" x2="${padL}" y2="${H-padB}"/>
+      <line class="zero" x1="${padL}" y1="${oneY}" x2="${W-padR}" y2="${oneY}"/>
+      ${lines}
+      <text class="glabel" x="${padL}" y="${H-8}">${equity[0].date}</text>
+      <text class="glabel" x="${W-padR}" y="${H-8}" text-anchor="end">${equity[equity.length-1].date}</text>
+      <text class="glabel" x="4" y="${y(max)+4}">${max.toFixed(2)}x</text>
+      <text class="glabel" x="4" y="${y(min)+4}">${min.toFixed(2)}x</text>
+      <text class="glabel" x="4" y="${oneY+4}">1.0x</text>
+    </svg></section>`;
+}
+
+function renderByYear(byYear){
+  if(!byYear||!byYear.length) return "";
+  const rows=byYear.map(r=>{
+    const w=Math.round(r.hit_rate*100);
+    const color=r.hit_rate>=0.55?"var(--up)":r.hit_rate<0.5?"var(--down)":"var(--muted)";
+    return `<div class="bar-row">
+      <span class="yr">${r.year}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${w}%;background:${color}"></div></div>
+      <span class="val">${w}%</span>
+      <span class="muted" style="width:5rem;text-align:right">戦略 ${pct(r.strategy_return,0)}</span>
+    </div>`;
+  }).join("");
+  return `<section class="card"><h2>年別 方向的中率(勝率分布)と戦略リターン</h2>${rows}</section>`;
+}
+
+function render(bt){
+  document.getElementById("sub").textContent =
+    `${bt.instrument} ・ 検証 ${bt.start} 〜 ${bt.end} ・ テスト ${bt.n} 営業日 ・ 特徴量: ${(bt.features||[]).join(", ")} ・ 学習は各日「それ以前のみ」(先読みなし) ・ 予測対象=寄り付きギャップ / 売買=寄り建て→引け`;
+  const s=bt.strategies||{};
+  const summary=`<section class="card"><h2>サマリー</h2><div class="cards">
+    ${stat("寄り付き方向 的中率", pct(bt.hit_rate,1), bt.hit_rate>=0.55?"pos":bt.hit_rate<0.5?"neg":"")}
+    ${stat("ギャップ 平均誤差", pct(bt.mae,2))}
+    ${stat("戦略 累積(寄→引)", pct((s.long_flat||{}).total_return), cls((s.long_flat||{}).total_return))}
+    ${stat("バイ&ホールド", pct((s.buy_hold||{}).total_return), cls((s.buy_hold||{}).total_return))}
+  </div>
+  <div class="muted" style="font-size:.75rem;margin-top:.6rem">「的中率」は<b>寄り付きの方向</b>を当てた割合(このツールが予測している対象)。「戦略」は寄り付きで建て大引けで手仕舞う<b>取引可能な</b>損益で、<b>ギャップ自体は取れない</b>点に注意(寄り付いた時点でギャップは価格に織り込み済み)。</div>
+  </section>`;
+  document.getElementById("content").innerHTML =
+    summary + renderStrategyTable(s) + renderEquity(bt.equity) + renderByYear(bt.by_year) +
+    `<section class="card"><div class="disc">
+      ※ 本バックテストは日経225指数レベルの検証です。米国終値の特徴量(S&P500リターン・VIX変化・USD/JPYリターン)から
+      <b>翌営業日の寄り付きギャップ</b>を、各時点で「それ以前のデータのみ」で学習して予測(ウォークフォワード=先読みなし)。
+      的中率はギャップの方向を当てた割合です。戦略損益は<b>寄り付きで建て・大引けで手仕舞う(寄→引)取引可能な範囲</b>のみで計算しており、
+      予測できても<b>ギャップ自体は約定できない</b>ため取れません(以前の版は終値〜終値でギャップを含めてしまい非現実的な数値になっていました)。
+      配当・手数料・スリッページは考慮していません。過去の成績は将来を保証するものではありません。投資判断の最終責任は利用者本人にあります。
+    </div></section>`;
+}
+
+if(window.__BT__){ render(window.__BT__); }
+else {
+  // Static (Pages): read the pre-generated JSON. Live (local server): fall back to
+  // the on-demand API (first call may take a few seconds).
+  fetch("./backtest.json").then(r=>r.ok?r.json():Promise.reject(r.status))
+    .then(render)
+    .catch(()=>{
+      document.getElementById("content").innerHTML=`<div class="empty">計算中...(初回は数秒かかります)</div>`;
+      fetch("/api/outlook/backtest").then(r=>r.ok?r.json():Promise.reject(r.status))
+        .then(render)
+        .catch(()=>{document.getElementById("content").innerHTML=`<div class="empty">バックテスト結果がまだありません。</div>`;});
+    });
+}
+</script>
+</body>
+</html>

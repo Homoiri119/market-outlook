@@ -47,6 +47,7 @@ class MorningOutlookOut(BaseModel):
     futures_source: str | None = None
     us_detail: str | None = None
     us_market: dict | None = None
+    sectors: list | None = None
     narrative: str | None = None
     expected_range_low: float | None = None
     expected_range_high: float | None = None

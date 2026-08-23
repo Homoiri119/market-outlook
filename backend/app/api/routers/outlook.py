@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -7,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.schemas import MorningOutlookOut, OutlookRunResultOut
+from app.services.backtest import run_index_backtest
 from app.services.morning_outlook import (
     OutlookUnavailableError,
     get_latest_morning_outlook,
@@ -17,6 +19,22 @@ from app.services.pipeline import run_morning_outlook_pipeline
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/outlook", tags=["outlook"])
+
+# Backtest is expensive (walk-forward) and changes slowly; cache per calendar day.
+_backtest_cache: dict = {}
+
+
+@router.get("/backtest")
+def backtest(years: float = 6.0, db: Session = Depends(get_db)) -> dict:
+    key = (round(years, 2), dt.date.today().isoformat())
+    if key not in _backtest_cache:
+        try:
+            _backtest_cache.clear()
+            _backtest_cache[key] = run_index_backtest(years=years)
+        except Exception as exc:
+            logger.exception("Backtest failed")
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _backtest_cache[key]
 
 
 @router.post("/run", response_model=OutlookRunResultOut)

@@ -55,3 +55,9 @@ def health() -> dict[str, str]:
 def dashboard() -> FileResponse:
     """Serve the no-build HTML dashboard (open http://localhost:8000/)."""
     return FileResponse(STATIC_DIR / "dashboard.html")
+
+
+@app.get("/backtest.html", include_in_schema=False)
+def backtest_page() -> FileResponse:
+    """Serve the backtest page (falls back to /api/backtest for data in live mode)."""
+    return FileResponse(STATIC_DIR / "backtest.html")

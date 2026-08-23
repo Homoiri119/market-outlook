@@ -1,18 +1,17 @@
-name: Morning Outlook
+name: Backtest
 
-# 08:00 JST(東京市場が開く9:00の直前)に実行。
-# GitHub の cron は UTC。08:00 JST = 前日 23:00 UTC。
-# 月〜金(JST)= 日〜木(UTC)= 0-4。
+# Weekly refresh of the backtest page (it changes slowly), plus manual runs.
+# Saturday 07:00 JST = Friday 22:00 UTC.
 on:
   schedule:
-    - cron: "0 23 * * 0-4"
+    - cron: "0 22 * * 5"
   workflow_dispatch: {}
 
 permissions:
   contents: write
 
 concurrency:
-  group: morning-outlook
+  group: backtest
   cancel-in-progress: false
 
 jobs:
@@ -31,14 +30,10 @@ jobs:
       - name: Install dependencies
         run: pip install -r backend/requirements.txt
 
-      - name: Compute outlook, notify Discord, build dashboard
-        env:
-          ANALYZE_DISCORD_WEBHOOK_URL: ${{ secrets.ANALYZE_DISCORD_WEBHOOK_URL }}
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
-          JQUANTS_API_KEY: ${{ secrets.JQUANTS_API_KEY }}
-        run: python backend/scripts/run_cloud.py
+      - name: Run backtest and build page
+        run: python backend/scripts/run_backtest.py
 
-      - name: Commit updated dashboard
+      - name: Commit backtest page
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -46,6 +41,6 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "chore: morning outlook $(date -u +%Y-%m-%d)"
+            git commit -m "chore: backtest refresh $(date -u +%Y-%m-%d)"
             git push
           fi

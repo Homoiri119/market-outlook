@@ -124,6 +124,7 @@ def compute_stateless_outlook(date: dt.date | None = None) -> dict:
     range_low, range_high = analytics.expected_range(expected_move, recent_gaps)
     context = analytics.nikkei_context(nikkei_ohlc)
     vix_close = us.get("vix_close") if us else None
+    us_struct = us_market_struct(us, extra)
 
     result = {
         "date": date.isoformat(),
@@ -144,7 +145,8 @@ def compute_stateless_outlook(date: dt.date | None = None) -> dict:
         "nikkei_vs_ma25": context.get("vs_ma25"),
         "vix_regime": analytics.vix_regime(vix_close),
         "us_detail": _format_us_detail(us),
-        "us_market": us_market_struct(us, extra),
+        "us_market": us_struct,
+        "sectors": analytics.sector_signals(us_struct),
         "narrative": _build_narrative(
             direction=direction,
             expected_move=expected_move,

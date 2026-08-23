@@ -12,12 +12,19 @@ class Settings(BaseSettings):
     jquants_mail: str = ""
     jquants_password: str = ""
     jquants_refresh_token: str = ""
+    jquants_api_key: str = ""  # paid API key (for sector/stock-level backtest)
 
     # EDINET
     edinet_api_key: str = ""
 
     # Discord
+    # Preferred: ANALYZE_DISCORD_WEBHOOK_URL; falls back to DISCORD_WEBHOOK_URL.
+    analyze_discord_webhook_url: str = ""
     discord_webhook_url: str = ""
+
+    @property
+    def effective_discord_webhook(self) -> str:
+        return self.analyze_discord_webhook_url or self.discord_webhook_url
 
     # App
     database_url: str = f"sqlite:///{BASE_DIR / 'app.db'}"

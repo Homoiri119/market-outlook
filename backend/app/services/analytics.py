@@ -97,6 +97,47 @@ def nikkei_context(nikkei_ohlc: pd.DataFrame) -> dict:
     return {"ma25": ma25, "vs_ma25": (last - ma25) / ma25 if ma25 else None}
 
 
+def _blend(*vals: float | None) -> float | None:
+    xs = [v for v in vals if v is not None]
+    return sum(xs) / len(xs) if xs else None
+
+
+def sector_signals(m: dict | None) -> list[dict]:
+    """Heuristic tailwind/headwind score per Tokyo sector, translated from the
+    overnight drivers in the US-market struct `m`. Scores are in return-like units
+    (fractions). This is an interpretive read, not a precise forecast — the driver
+    label is shown so the reasoning is transparent.
+    """
+    if not m:
+        return []
+    sp = m.get("sp500_return")
+    ndx = m.get("nasdaq_return")
+    fx = m.get("usdjpy_return")  # + = weak yen (tailwind for exporters)
+    sox = m.get("sox_return")
+    wti = m.get("wti_return")
+    bp = m.get("us10y_change_bp")
+    # A +10bp move in US yields ≈ +0.5% "tailwind" for rate-sensitive sectors.
+    rates = (bp / 2000.0) if bp is not None else None
+
+    defs = [
+        ("半導体・電子部品", _blend(sox, ndx), "SOX半導体・NASDAQ"),
+        ("電機・精密", _blend(sox, ndx, sp), "SOX・ハイテク"),
+        ("自動車・輸送機", _blend(fx, sp), "円安・米国株"),
+        ("機械", _blend(sp, fx), "米国株・円安"),
+        ("情報通信・グロース", _blend(ndx, (-rates) if rates is not None else None), "NASDAQ・金利低下"),
+        ("銀行", rates, "米10年債利回り"),
+        ("証券・保険", _blend(rates, sp), "利回り・米国株"),
+        ("エネルギー・鉱業", wti, "WTI原油"),
+        ("商社・卸売", _blend(wti, sp), "原油・米国株"),
+        ("不動産", (-rates) if rates is not None else None, "金利低下"),
+        ("医薬・食品(ディフェンシブ)", (-0.3 * sp) if sp is not None else None, "リスクオフ耐性"),
+    ]
+    out = []
+    for name, score, driver in defs:
+        out.append({"name": name, "score": None if score is None else float(score), "driver": driver})
+    return out
+
+
 def vix_regime(vix_level: float | None) -> str | None:
     """Coarse volatility regime label key for the VIX level."""
     if vix_level is None:

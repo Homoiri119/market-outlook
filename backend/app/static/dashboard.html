@@ -35,13 +35,17 @@
   }
   header h1 { font-size: 1.15rem; margin: 0; font-weight: 700; }
   .updated { color: var(--muted); font-size: 0.8rem; }
-  .btns { display: flex; gap: 0.5rem; }
+  .btns { display: flex; gap: 0.5rem; align-items: center; }
   button {
     background: var(--accent); color: #04222e; border: none; font-weight: 700;
     padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-size: 0.85rem;
   }
   button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
   button:disabled { opacity: 0.5; cursor: default; }
+  .btlink {
+    display: inline-block; padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.85rem;
+    font-weight: 700; text-decoration: none; color: var(--text); border: 1px solid var(--accent);
+  }
 
   .hero {
     display: grid; grid-template-columns: 200px 1fr; gap: 1.25rem;
@@ -142,6 +146,13 @@
   .us-item.neg .val { color: var(--down); }
   .us-item .note { font-size: 0.72rem; color: var(--muted); margin-top: 0.1rem; }
 
+  /* sector heatmap */
+  .sector-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem; }
+  .sector-tile { border-radius: 10px; padding: 0.7rem 0.8rem; border: 1px solid var(--line); }
+  .sector-tile .sname { font-size: 0.85rem; font-weight: 700; }
+  .sector-tile .sscore { font-size: 1.15rem; font-weight: 800; margin-top: 0.15rem; }
+  .sector-tile .sdriver { font-size: 0.68rem; color: var(--muted); margin-top: 0.1rem; }
+
   .muted { color: var(--muted); }
   .error { background: var(--down-bg); color: #fecaca; padding: 0.75rem 1rem; border-radius: 10px; margin-bottom: 1rem; }
   .empty { color: var(--muted); padding: 2rem 0; text-align: center; }
@@ -158,6 +169,7 @@
       <div class="updated" id="updated"></div>
     </div>
     <div class="btns">
+      <a class="btlink" href="./backtest.html">📊 バックテスト</a>
       <button id="refresh">最新データで再計算</button>
       <button class="ghost" id="reload">再読み込み</button>
     </div>
@@ -329,6 +341,27 @@ function renderAccuracy(history) {
     </div></section>`;
 }
 
+function renderSectors(o) {
+  const sectors = (o.sectors || []).filter(s => s.score != null);
+  if (!sectors.length) return "";
+  sectors.sort((a, b) => b.score - a.score);
+  const tiles = sectors.map(s => {
+    const intensity = Math.min(1, Math.abs(s.score) / 0.012);
+    const rgb = s.score >= 0 ? "34,197,94" : "239,68,68";
+    const bg = `rgba(${rgb}, ${(0.08 + 0.55 * intensity).toFixed(2)})`;
+    const arrow = s.score > 0.0005 ? "▲" : s.score < -0.0005 ? "▼" : "―";
+    return `<div class="sector-tile" style="background:${bg}">
+      <div class="sname">${s.name}</div>
+      <div class="sscore">${arrow} ${pct(s.score)}</div>
+      <div class="sdriver">${s.driver}</div>
+    </div>`;
+  }).join("");
+  return `<section class="card">
+    <h2>セクター追い風/逆風マップ <span class="muted" style="font-weight:400;font-size:.78rem">※オーバーナイト要因からの示唆(ヒューリスティック)</span></h2>
+    <div class="sector-grid">${tiles}</div>
+  </section>`;
+}
+
 function renderNarrative(o) {
   if (!o.narrative) return "";
   return `<section class="card"><h2>解説</h2><div class="narrative">${o.narrative}</div></section>`;
@@ -384,6 +417,7 @@ function renderInto(o, history, updatedText) {
     renderAccuracy(history || []) +
     renderContext(o) +
     renderUS(o) +
+    renderSectors(o) +
     renderNarrative(o) +
     renderChart(history || []);
   document.getElementById("updated").textContent = updatedText;
@@ -425,7 +459,10 @@ async function refresh() {
 //    no backend, so hide the action buttons and render directly.
 if (window.__DATA__) {
   const d = window.__DATA__;
-  document.querySelector(".btns").style.display = "none";
+  // Static (GitHub Pages) mode: no backend, so hide the action buttons but keep the
+  // backtest link usable.
+  document.getElementById("refresh").style.display = "none";
+  document.getElementById("reload").style.display = "none";
   renderInto(d.outlook, d.history, "自動更新: 毎朝8:00 JST (GitHub Actions) ・ 生成 " + (d.generated_at || ""));
 } else {
   document.getElementById("refresh").addEventListener("click", refresh);

@@ -35,13 +35,17 @@
   }
   header h1 { font-size: 1.15rem; margin: 0; font-weight: 700; }
   .updated { color: var(--muted); font-size: 0.8rem; }
-  .btns { display: flex; gap: 0.5rem; }
+  .btns { display: flex; gap: 0.5rem; align-items: center; }
   button {
     background: var(--accent); color: #04222e; border: none; font-weight: 700;
     padding: 0.5rem 1rem; border-radius: 8px; cursor: pointer; font-size: 0.85rem;
   }
   button.ghost { background: transparent; color: var(--text); border: 1px solid var(--line); }
   button:disabled { opacity: 0.5; cursor: default; }
+  .btlink {
+    display: inline-block; padding: 0.5rem 1rem; border-radius: 8px; font-size: 0.85rem;
+    font-weight: 700; text-decoration: none; color: var(--text); border: 1px solid var(--accent);
+  }
 
   .hero {
     display: grid; grid-template-columns: 200px 1fr; gap: 1.25rem;
@@ -142,6 +146,13 @@
   .us-item.neg .val { color: var(--down); }
   .us-item .note { font-size: 0.72rem; color: var(--muted); margin-top: 0.1rem; }
 
+  /* sector heatmap */
+  .sector-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.5rem; }
+  .sector-tile { border-radius: 10px; padding: 0.7rem 0.8rem; border: 1px solid var(--line); }
+  .sector-tile .sname { font-size: 0.85rem; font-weight: 700; }
+  .sector-tile .sscore { font-size: 1.15rem; font-weight: 800; margin-top: 0.15rem; }
+  .sector-tile .sdriver { font-size: 0.68rem; color: var(--muted); margin-top: 0.1rem; }
+
   .muted { color: var(--muted); }
   .error { background: var(--down-bg); color: #fecaca; padding: 0.75rem 1rem; border-radius: 10px; margin-bottom: 1rem; }
   .empty { color: var(--muted); padding: 2rem 0; text-align: center; }
@@ -149,7 +160,7 @@
     .hero { grid-template-columns: 1fr; }
   }
 </style>
-<script>window.__DATA__ = {"outlook": {"date": "2026-08-23", "direction": "FLAT", "expected_move": 0.0006953345702645809, "confidence": 0.6, "implied_gap": -0.0015353675355564093, "model_return": 0.005900306150513557, "nikkei_prev_close": 66016.359375, "nikkei_futures": 65915.0, "implied_open_level": 66062.26283187645, "futures_source": "NIY=F", "expected_range_low": -0.006244837725048, "expected_range_high": 0.007635506865577162, "expected_open_low": 65604.09792350467, "expected_open_high": 66520.42774024823, "nikkei_ma25": 65615.1203125, "nikkei_vs_ma25": 0.0061150396522790355, "vix_regime": "watch", "us_detail": "2026-08-21 米国終値: S&P500 +0.43% / NASDAQ +0.43% / Dow +0.98% / VIX 15.1 (-0.9) / USD/JPY +0.42%", "us_market": {"date": "2026-08-21", "sp500_return": 0.004346193543703691, "nasdaq_return": 0.004346118737267535, "dow_return": 0.009814414811157857, "vix_close": 15.130000114440918, "vix_change": -0.880000114440918, "usdjpy_return": 0.004195212544838567, "sentiment": "risk_on", "sox_return": -0.005055026723009282, "sox_level": 11740.3701171875, "us10y_level": 4.73799991607666, "us10y_change_bp": 4.199981689453125, "wti_return": -0.00876698458850178, "wti_level": 87.05999755859375}, "narrative": "本日の東京市場は、日経225が前日終値(66,016円)に対し 約 +0.07%(66,062円 近辺)で寄り付く見通しです。方向感: 【ほぼ横ばい】\n主な背景: 米国株の上昇、円安。\n内訳: 日経先物ギャップ -0.15%(主指標) / 回帰モデル予測 +0.59%。\n(寄り付き前の推定値であり、投資判断の最終責任は利用者本人にあります。)"}, "history": [{"date": "2026-08-23", "direction": "FLAT", "expected_move": 0.0006953345702645809, "actual_move": null, "hit": null}, {"date": "2026-08-20", "direction": "STRONG_DOWN", "expected_move": -0.008705540457816262, "actual_move": 0.006220563989828962, "hit": false}], "generated_at": "2026-08-23 19:51 JST"};</script>
+<script>window.__DATA__ = {"outlook": {"date": "2026-08-23", "direction": "FLAT", "expected_move": 0.0006953345702645809, "confidence": 0.6, "implied_gap": -0.0015353675355564093, "model_return": 0.005900306150513557, "nikkei_prev_close": 66016.359375, "nikkei_futures": 65915.0, "implied_open_level": 66062.26283187645, "futures_source": "NIY=F", "expected_range_low": -0.006244837725048, "expected_range_high": 0.007635506865577162, "expected_open_low": 65604.09792350467, "expected_open_high": 66520.42774024823, "nikkei_ma25": 65615.1203125, "nikkei_vs_ma25": 0.0061150396522790355, "vix_regime": "watch", "us_detail": "2026-08-21 米国終値: S&P500 +0.43% / NASDAQ +0.43% / Dow +0.98% / VIX 15.1 (-0.9) / USD/JPY +0.42%", "us_market": {"date": "2026-08-21", "sp500_return": 0.004346193543703691, "nasdaq_return": 0.004346118737267535, "dow_return": 0.009814414811157857, "vix_close": 15.130000114440918, "vix_change": -0.880000114440918, "usdjpy_return": 0.004195212544838567, "sentiment": "risk_on", "sox_return": -0.005055026723009282, "sox_level": 11740.3701171875, "us10y_level": 4.73799991607666, "us10y_change_bp": 4.199981689453125, "wti_return": -0.00876698458850178, "wti_level": 87.05999755859375}, "sectors": [{"name": "半導体・電子部品", "score": -0.0003544539928708734, "driver": "SOX半導体・NASDAQ"}, {"name": "電機・精密", "score": 0.001212428519320648, "driver": "SOX・ハイテク"}, {"name": "自動車・輸送機", "score": 0.004270703044271129, "driver": "円安・米国株"}, {"name": "機械", "score": 0.004270703044271129, "driver": "米国株・円安"}, {"name": "情報通信・グロース", "score": 0.0011230639462704861, "driver": "NASDAQ・金利低下"}, {"name": "銀行", "score": 0.0020999908447265625, "driver": "米10年債利回り"}, {"name": "証券・保険", "score": 0.003223092194215127, "driver": "利回り・米国株"}, {"name": "エネルギー・鉱業", "score": -0.00876698458850178, "driver": "WTI原油"}, {"name": "商社・卸売", "score": -0.0022103955223990446, "driver": "原油・米国株"}, {"name": "不動産", "score": -0.0020999908447265625, "driver": "金利低下"}, {"name": "医薬・食品(ディフェンシブ)", "score": -0.0013038580631111075, "driver": "リスクオフ耐性"}], "narrative": "本日の東京市場は、日経225が前日終値(66,016円)に対し 約 +0.07%(66,062円 近辺)で寄り付く見通しです。方向感: 【ほぼ横ばい】\n主な背景: 米国株の上昇、円安。\n内訳: 日経先物ギャップ -0.15%(主指標) / 回帰モデル予測 +0.59%。\n(寄り付き前の推定値であり、投資判断の最終責任は利用者本人にあります。)"}, "history": [{"date": "2026-08-23", "direction": "FLAT", "expected_move": 0.0006953345702645809, "actual_move": null, "hit": null}, {"date": "2026-08-20", "direction": "STRONG_DOWN", "expected_move": -0.008705540457816262, "actual_move": 0.006220563989828962, "hit": false}], "generated_at": "2026-08-23 20:14 JST"};</script>
 </head>
 <body>
 <div class="wrap">
@@ -159,6 +170,7 @@
       <div class="updated" id="updated"></div>
     </div>
     <div class="btns">
+      <a class="btlink" href="./backtest.html">📊 バックテスト</a>
       <button id="refresh">最新データで再計算</button>
       <button class="ghost" id="reload">再読み込み</button>
     </div>
@@ -330,6 +342,27 @@ function renderAccuracy(history) {
     </div></section>`;
 }
 
+function renderSectors(o) {
+  const sectors = (o.sectors || []).filter(s => s.score != null);
+  if (!sectors.length) return "";
+  sectors.sort((a, b) => b.score - a.score);
+  const tiles = sectors.map(s => {
+    const intensity = Math.min(1, Math.abs(s.score) / 0.012);
+    const rgb = s.score >= 0 ? "34,197,94" : "239,68,68";
+    const bg = `rgba(${rgb}, ${(0.08 + 0.55 * intensity).toFixed(2)})`;
+    const arrow = s.score > 0.0005 ? "▲" : s.score < -0.0005 ? "▼" : "―";
+    return `<div class="sector-tile" style="background:${bg}">
+      <div class="sname">${s.name}</div>
+      <div class="sscore">${arrow} ${pct(s.score)}</div>
+      <div class="sdriver">${s.driver}</div>
+    </div>`;
+  }).join("");
+  return `<section class="card">
+    <h2>セクター追い風/逆風マップ <span class="muted" style="font-weight:400;font-size:.78rem">※オーバーナイト要因からの示唆(ヒューリスティック)</span></h2>
+    <div class="sector-grid">${tiles}</div>
+  </section>`;
+}
+
 function renderNarrative(o) {
   if (!o.narrative) return "";
   return `<section class="card"><h2>解説</h2><div class="narrative">${o.narrative}</div></section>`;
@@ -385,6 +418,7 @@ function renderInto(o, history, updatedText) {
     renderAccuracy(history || []) +
     renderContext(o) +
     renderUS(o) +
+    renderSectors(o) +
     renderNarrative(o) +
     renderChart(history || []);
   document.getElementById("updated").textContent = updatedText;
@@ -426,7 +460,10 @@ async function refresh() {
 //    no backend, so hide the action buttons and render directly.
 if (window.__DATA__) {
   const d = window.__DATA__;
-  document.querySelector(".btns").style.display = "none";
+  // Static (GitHub Pages) mode: no backend, so hide the action buttons but keep the
+  // backtest link usable.
+  document.getElementById("refresh").style.display = "none";
+  document.getElementById("reload").style.display = "none";
   renderInto(d.outlook, d.history, "自動更新: 毎朝8:00 JST (GitHub Actions) ・ 生成 " + (d.generated_at || ""));
 } else {
   document.getElementById("refresh").addEventListener("click", refresh);
