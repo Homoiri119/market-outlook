@@ -21,7 +21,8 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-API_KEY = os.environ.get("JQUANTS_API_KEY", "")
+RAW_KEY = os.environ.get("JQUANTS_API_KEY", "")
+API_KEY = RAW_KEY.strip()
 
 CANDIDATE_BASE_URLS = [
     "https://api.jquants-pro.com/v2",
@@ -29,15 +30,29 @@ CANDIDATE_BASE_URLS = [
     "https://api.jquants.com/v1",  # (would need a token, listed here only to detect 401 vs 404)
 ]
 
+# Auth header styles to try (the docs disagree; we resolve it empirically).
+AUTH_STYLES = [
+    ("x-api-key", lambda k: {"x-api-key": k}),
+    ("Authorization: Bearer", lambda k: {"Authorization": f"Bearer {k}"}),
+    ("Authorization: raw", lambda k: {"Authorization": k}),
+]
+
+
+def _fingerprint(raw: str) -> str:
+    stripped = raw.strip()
+    ws = "YES (leading/trailing whitespace!)" if raw != stripped else "no"
+    mask = f"{stripped[:2]}…{stripped[-2:]}" if len(stripped) >= 4 else "(too short)"
+    return f"raw_len={len(raw)} stripped_len={len(stripped)} whitespace={ws} fingerprint={mask}"
+
 SECTOR_FIELDS = [
     "Sector17Code", "Sector17CodeName", "Sector33Code", "Sector33CodeName",
     "MarketCode", "MarketCodeName", "CompanyName", "Code",
 ]
 
 
-def _get(base: str, path: str, params: dict) -> tuple[int, dict | str]:
+def _get(base: str, path: str, params: dict, headers: dict) -> tuple[int, dict | str]:
     try:
-        r = httpx.get(f"{base}{path}", params=params, headers={"x-api-key": API_KEY}, timeout=30)
+        r = httpx.get(f"{base}{path}", params=params, headers=headers, timeout=30)
     except Exception as e:  # pragma: no cover
         return -1, f"request error: {type(e).__name__}"
     try:
@@ -50,29 +65,35 @@ def main() -> int:
     if not API_KEY:
         print("FAIL: JQUANTS_API_KEY is not set in the environment.")
         return 1
-    print(f"API key detected (length={len(API_KEY)}). Testing base URLs with x-api-key header...\n")
+    print("Key diagnostics:", _fingerprint(RAW_KEY), "\n")
 
-    working_base = None
+    # Step 1: find a (base URL, auth style) combination that authenticates.
+    working = None  # (base, style_name, headers_fn)
     for base in CANDIDATE_BASE_URLS:
-        status, body = _get(base, "/listed/info", {})
-        n = len(body.get("info", [])) if isinstance(body, dict) else 0
-        note = ""
-        if isinstance(body, dict) and "message" in body:
-            note = f" msg={body['message'][:80]}"
-        print(f"[{base}] /listed/info -> HTTP {status}, rows={n}{note}")
-        if status == 200 and n > 0 and working_base is None:
-            working_base = base
+        for style_name, hfn in AUTH_STYLES:
+            status, body = _get(base, "/listed/info", {}, hfn(API_KEY))
+            n = len(body.get("info", [])) if isinstance(body, dict) else 0
+            msg = body.get("message", "")[:70] if isinstance(body, dict) else str(body)[:70]
+            print(f"[{base}] [{style_name}] /listed/info -> HTTP {status}, rows={n}  {msg}")
+            if status == 200 and n > 0 and working is None:
+                working = (base, style_name, hfn)
+        print()
 
-    if not working_base:
-        print("\nFAIL: No base URL returned listed/info with the given key.")
-        print("→ Check the key value in Secrets/.env, and whether your plan is Pro (api.jquants-pro.com) or standard (api.jquants.com).")
+    if not working:
+        print("FAIL: No (base URL, auth style) combination authenticated.")
+        print("→ If key diagnostics show whitespace or an unexpected length, re-copy the key from the")
+        print("  J-Quants dashboard into the Secret (no quotes/spaces). Otherwise verify the plan/key.")
         return 1
 
-    print(f"\nWORKING BASE URL: {working_base}\n")
+    working_base, style_name, hfn = working
+    print(f"WORKING: base={working_base}  auth={style_name}\n")
+
+    def get(path, params):
+        return _get(working_base, path, params, hfn(API_KEY))
 
     # Inspect the listed/info schema (which sector fields are present).
-    _, info = _get(working_base, "/listed/info", {})
-    sample = (info.get("info") or [{}])[0]
+    _, info = get("/listed/info", {})
+    sample = (info.get("info") or [{}])[0] if isinstance(info, dict) else {}
     print("listed/info sample fields present:")
     for f in SECTOR_FIELDS:
         print(f"  {f:18s}: {'YES' if f in sample else 'no'}  {repr(sample.get(f))[:40]}")
@@ -81,8 +102,8 @@ def main() -> int:
     end = dt.date.today()
     start = end - dt.timedelta(days=20)
     for code in ("7203", "72030"):
-        s, body = _get(working_base, "/prices/daily_quotes",
-                       {"code": code, "from": start.isoformat(), "to": end.isoformat()})
+        s, body = get("/prices/daily_quotes",
+                      {"code": code, "from": start.isoformat(), "to": end.isoformat()})
         n = len(body.get("daily_quotes", [])) if isinstance(body, dict) else 0
         print(f"\n/prices/daily_quotes code={code} -> HTTP {s}, rows={n}")
         if n:
@@ -92,7 +113,7 @@ def main() -> int:
     # Index endpoint (TOPIX) — may be premium.
     for path, params in [("/indices", {"code": "0000", "from": start.isoformat(), "to": end.isoformat()}),
                          ("/indices/topix", {"from": start.isoformat(), "to": end.isoformat()})]:
-        s, body = _get(working_base, path, params)
+        s, body = get(path, params)
         keys = [k for k in (body.keys() if isinstance(body, dict) else []) if k != "pagination_key"]
         print(f"\n{path} -> HTTP {s}, keys={keys}")
 
