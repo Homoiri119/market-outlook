@@ -1,10 +1,10 @@
 {
   "date": "2026-08-23",
   "direction": "FLAT",
-  "expected_move": 0.0006953345702645809,
+  "expected_move": 0.0006953345702645811,
   "confidence": 0.6,
   "implied_gap": -0.0015353675355564093,
-  "model_return": 0.005900306150513557,
+  "model_return": 0.0059003061505135575,
   "nikkei_prev_close": 66016.359375,
   "nikkei_futures": 65915.0,
   "implied_open_level": 66062.26283187645,
