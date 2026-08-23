@@ -149,7 +149,10 @@ def main() -> int:
         ("/equities/master", {}),                                        # listed info + sectors
         ("/equities/bars/daily", {"code": "7203", "from": d1, "to": d2}),  # daily quotes
         ("/indices/bars/daily/topix", {"from": d1, "to": d2}),           # TOPIX
-        ("/indices/bars/daily", {"code": "0028", "from": d1, "to": d2}),  # sector index (electric appliances?)
+        ("/indices/bars/daily", {"code": "0028", "from": d1, "to": d2}),  # sector index
+        # Fundamentals — needed for PER/PBR/ROE/dividend analysis:
+        ("/fins/statements", {"code": "7203"}),
+        ("/fins/dividend", {"code": "7203"}),
     ]
 
     working_host = None
@@ -174,6 +177,15 @@ def main() -> int:
             print("equities/master ALL fields:", sorted(sample.keys()))
             print("sector-related:", {k: sample[k] for k in sample if "ector" in k or "arket" in k or "17" in k or "33" in k})
         print()
+
+    # Fundamentals schema (if the plan allows it).
+    s, body = _get("https://api.jquants.com/v2", "/fins/statements", {"code": "7203"}, {"x-api-key": API_KEY})
+    print(f"/fins/statements -> HTTP {s}")
+    if isinstance(body, dict):
+        arr = next((v for v in body.values() if isinstance(v, list)), [])
+        if arr:
+            print("  fins/statements ALL fields:", sorted(arr[-1].keys()))
+    print()
 
     # Also try the mail/password token flow (in case the account still supports it).
     if MAIL and PASSWORD:
