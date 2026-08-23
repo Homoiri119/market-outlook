@@ -38,11 +38,53 @@ AUTH_STYLES = [
 ]
 
 
+MAIL = os.environ.get("JQUANTS_MAIL", "").strip()
+PASSWORD = os.environ.get("JQUANTS_PASSWORD", "")
+
+# Hosts to try for the mail/password -> refreshToken -> idToken -> Bearer flow.
+TOKEN_FLOW_BASES = [
+    "https://api.jquants.com/v1",       # standard J-Quants
+    "https://api.jquants-pro.com/v2",   # J-Quants Pro
+]
+
+
 def _fingerprint(raw: str) -> str:
     stripped = raw.strip()
     ws = "YES (leading/trailing whitespace!)" if raw != stripped else "no"
     mask = f"{stripped[:2]}…{stripped[-2:]}" if len(stripped) >= 4 else "(too short)"
     return f"raw_len={len(raw)} stripped_len={len(stripped)} whitespace={ws} fingerprint={mask}"
+
+
+def _post(url: str, json_body=None, params=None) -> tuple[int, dict | str]:
+    try:
+        r = httpx.post(url, json=json_body, params=params, timeout=30)
+    except Exception as e:  # pragma: no cover
+        return -1, f"request error: {type(e).__name__}"
+    try:
+        return r.status_code, r.json()
+    except Exception:
+        return r.status_code, r.text[:200]
+
+
+def try_token_flow(base: str):
+    """mail/password -> refreshToken -> idToken -> GET /listed/info. Returns (ok, idToken)."""
+    print(f"--- token flow @ {base} ---")
+    s1, b1 = _post(f"{base}/token/auth_user", json_body={"mailaddress": MAIL, "password": PASSWORD})
+    rt = b1.get("refreshToken") if isinstance(b1, dict) else None
+    msg1 = b1.get("message", "")[:70] if isinstance(b1, dict) else str(b1)[:70]
+    print(f"  auth_user      -> HTTP {s1}, refreshToken={'YES' if rt else 'no'} {msg1}")
+    if not rt:
+        return False, None
+    s2, b2 = _post(f"{base}/token/auth_refresh", params={"refreshtoken": rt})
+    idt = b2.get("idToken") if isinstance(b2, dict) else None
+    msg2 = b2.get("message", "")[:70] if isinstance(b2, dict) else str(b2)[:70]
+    print(f"  auth_refresh   -> HTTP {s2}, idToken={'YES' if idt else 'no'} {msg2}")
+    if not idt:
+        return False, None
+    s3, b3 = _get(base, "/listed/info", {}, {"Authorization": f"Bearer {idt}"})
+    n = len(b3.get("info", [])) if isinstance(b3, dict) else 0
+    print(f"  /listed/info   -> HTTP {s3}, rows={n}")
+    return (s3 == 200 and n > 0), idt
 
 SECTOR_FIELDS = [
     "Sector17Code", "Sector17CodeName", "Sector33Code", "Sector33CodeName",
@@ -62,34 +104,45 @@ def _get(base: str, path: str, params: dict, headers: dict) -> tuple[int, dict |
 
 
 def main() -> int:
-    if not API_KEY:
-        print("FAIL: JQUANTS_API_KEY is not set in the environment.")
+    # --- Preferred: mail/password token flow (the chosen method) ---
+    working_base = None
+    id_token = None
+    if MAIL and PASSWORD:
+        print("=== Mail/password token flow ===")
+        for base in TOKEN_FLOW_BASES:
+            ok, idt = try_token_flow(base)
+            print()
+            if ok:
+                working_base, id_token = base, idt
+                break
+    else:
+        print("JQUANTS_MAIL / JQUANTS_PASSWORD not set — skipping token flow.\n")
+
+    # --- Fallback probe: API-key styles (kept for diagnostics) ---
+    if not working_base and API_KEY:
+        print("Key diagnostics:", _fingerprint(RAW_KEY))
+        print("=== API-key probe ===")
+        for base in CANDIDATE_BASE_URLS:
+            for style_name, hfn in AUTH_STYLES:
+                status, body = _get(base, "/listed/info", {}, hfn(API_KEY))
+                n = len(body.get("info", [])) if isinstance(body, dict) else 0
+                msg = body.get("message", "")[:60] if isinstance(body, dict) else str(body)[:60]
+                print(f"[{base}] [{style_name}] -> HTTP {status}, rows={n}  {msg}")
+                if status == 200 and n > 0 and working_base is None:
+                    working_base = base
+            print()
+
+    if not working_base:
+        print("FAIL: Could not authenticate with mail/password token flow nor API key.")
+        print("→ Verify JQUANTS_MAIL/JQUANTS_PASSWORD are correct, and whether the account is")
+        print("  standard (api.jquants.com/v1) or Pro (api.jquants-pro.com/v2).")
         return 1
-    print("Key diagnostics:", _fingerprint(RAW_KEY), "\n")
 
-    # Step 1: find a (base URL, auth style) combination that authenticates.
-    working = None  # (base, style_name, headers_fn)
-    for base in CANDIDATE_BASE_URLS:
-        for style_name, hfn in AUTH_STYLES:
-            status, body = _get(base, "/listed/info", {}, hfn(API_KEY))
-            n = len(body.get("info", [])) if isinstance(body, dict) else 0
-            msg = body.get("message", "")[:70] if isinstance(body, dict) else str(body)[:70]
-            print(f"[{base}] [{style_name}] /listed/info -> HTTP {status}, rows={n}  {msg}")
-            if status == 200 and n > 0 and working is None:
-                working = (base, style_name, hfn)
-        print()
-
-    if not working:
-        print("FAIL: No (base URL, auth style) combination authenticated.")
-        print("→ If key diagnostics show whitespace or an unexpected length, re-copy the key from the")
-        print("  J-Quants dashboard into the Secret (no quotes/spaces). Otherwise verify the plan/key.")
-        return 1
-
-    working_base, style_name, hfn = working
-    print(f"WORKING: base={working_base}  auth={style_name}\n")
+    print(f"WORKING BASE URL: {working_base}\n")
 
     def get(path, params):
-        return _get(working_base, path, params, hfn(API_KEY))
+        headers = {"Authorization": f"Bearer {id_token}"} if id_token else {"x-api-key": API_KEY}
+        return _get(working_base, path, params, headers)
 
     # Inspect the listed/info schema (which sector fields are present).
     _, info = get("/listed/info", {})

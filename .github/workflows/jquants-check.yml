@@ -24,4 +24,6 @@ jobs:
       - name: Run J-Quants connectivity check
         env:
           JQUANTS_API_KEY: ${{ secrets.JQUANTS_API_KEY }}
+          JQUANTS_MAIL: ${{ secrets.JQUANTS_MAIL }}
+          JQUANTS_PASSWORD: ${{ secrets.JQUANTS_PASSWORD }}
         run: python backend/scripts/jquants_check.py
