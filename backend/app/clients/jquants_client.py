@@ -37,12 +37,14 @@ class JQuantsClient:
         self._refresh_token: str | None = settings.jquants_refresh_token or None
 
     @property
-    def _use_v2(self) -> bool:
-        return bool(settings.jquants_api_key)
+    def base_url(self) -> str:
+        # Confirmed: J-Quants Pro V2 (api.jquants-pro.com/v2) with the mail/password
+        # token flow. Configurable via JQUANTS_BASE_URL.
+        return settings.jquants_base_url or V1_BASE_URL
 
     @property
-    def base_url(self) -> str:
-        return settings.jquants_base_url if self._use_v2 else V1_BASE_URL
+    def _has_token_creds(self) -> bool:
+        return bool(settings.jquants_mail and settings.jquants_password) or bool(settings.jquants_refresh_token)
 
     def _fetch_refresh_token(self) -> str:
         if not settings.jquants_mail or not settings.jquants_password:
@@ -50,7 +52,7 @@ class JQuantsClient:
                 "JQUANTS_MAIL / JQUANTS_PASSWORD (or JQUANTS_REFRESH_TOKEN) is not configured"
             )
         resp = httpx.post(
-            f"{V1_BASE_URL}/token/auth_user",
+            f"{self.base_url}/token/auth_user",
             json={"mailaddress": settings.jquants_mail, "password": settings.jquants_password},
             timeout=30,
         )
@@ -65,7 +67,7 @@ class JQuantsClient:
             self._refresh_token = self._fetch_refresh_token()
 
         resp = httpx.post(
-            f"{V1_BASE_URL}/token/auth_refresh",
+            f"{self.base_url}/token/auth_refresh",
             params={"refreshtoken": self._refresh_token},
             timeout=30,
         )
@@ -73,7 +75,7 @@ class JQuantsClient:
             # refresh token expired - fetch a new one and retry once
             self._refresh_token = self._fetch_refresh_token()
             resp = httpx.post(
-                f"{V1_BASE_URL}/token/auth_refresh",
+                f"{self.base_url}/token/auth_refresh",
                 params={"refreshtoken": self._refresh_token},
                 timeout=30,
             )
@@ -92,9 +94,12 @@ class JQuantsClient:
         return self._refresh_id_token()
 
     def _headers(self) -> dict[str, str]:
-        if self._use_v2:
+        # Prefer the confirmed mail/password token flow; fall back to x-api-key.
+        if self._has_token_creds:
+            return {"Authorization": f"Bearer {self._get_id_token()}"}
+        if settings.jquants_api_key:
             return {"x-api-key": settings.jquants_api_key}
-        return {"Authorization": f"Bearer {self._get_id_token()}"}
+        raise JQuantsAuthError("No J-Quants credentials configured")
 
     def _get(self, path: str, params: dict[str, Any] | None = None) -> dict:
         resp = httpx.get(

@@ -42,9 +42,10 @@ MAIL = os.environ.get("JQUANTS_MAIL", "").strip()
 PASSWORD = os.environ.get("JQUANTS_PASSWORD", "")
 
 # Hosts to try for the mail/password -> refreshToken -> idToken -> Bearer flow.
+# Pro V2 first — confirmed to host the working auth endpoint.
 TOKEN_FLOW_BASES = [
-    "https://api.jquants.com/v1",       # standard J-Quants
     "https://api.jquants-pro.com/v2",   # J-Quants Pro
+    "https://api.jquants.com/v1",       # standard J-Quants
 ]
 
 
@@ -64,6 +65,19 @@ def _post(url: str, json_body=None, params=None) -> tuple[int, dict | str]:
         return r.status_code, r.json()
     except Exception:
         return r.status_code, r.text[:200]
+
+
+def _cred_diagnostics() -> None:
+    raw_mail = os.environ.get("JQUANTS_MAIL", "")
+    raw_pw = os.environ.get("JQUANTS_PASSWORD", "")
+    mail_ws = "YES" if raw_mail != raw_mail.strip() else "no"
+    pw_ws = "YES" if raw_pw != raw_pw.strip() else "no"
+    domain = MAIL.split("@", 1)[1] if "@" in MAIL else "(no @ !)"
+    first = MAIL[0] if MAIL else "?"
+    print("Credential diagnostics (values hidden):")
+    print(f"  MAIL: len={len(raw_mail)} whitespace={mail_ws} masked={first}***@{domain}")
+    print(f"  PASSWORD: len={len(raw_pw)} whitespace={pw_ws}")
+    print()
 
 
 def try_token_flow(base: str):
@@ -109,6 +123,7 @@ def main() -> int:
     id_token = None
     if MAIL and PASSWORD:
         print("=== Mail/password token flow ===")
+        _cred_diagnostics()
         for base in TOKEN_FLOW_BASES:
             ok, idt = try_token_flow(base)
             print()
