@@ -75,6 +75,18 @@ class MorningOutlook(Base):
     # JSON-serialized structured US market snapshot (returns/levels) for rich display.
     us_market_json: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     narrative: Mapped[str | None] = mapped_column(String(4000), nullable=True)
+    # Expected opening range (fractions + Nikkei levels).
+    expected_range_low: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expected_range_high: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expected_open_low: Mapped[float | None] = mapped_column(Float, nullable=True)
+    expected_open_high: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Trend / volatility context.
+    nikkei_ma25: Mapped[float | None] = mapped_column(Float, nullable=True)
+    nikkei_vs_ma25: Mapped[float | None] = mapped_column(Float, nullable=True)
+    vix_regime: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Prediction-accuracy tracking (filled in once the real Tokyo open is known).
+    actual_move: Mapped[float | None] = mapped_column(Float, nullable=True)
+    hit: Mapped[bool | None] = mapped_column(nullable=True)
 
     @property
     def us_market(self) -> dict | None:

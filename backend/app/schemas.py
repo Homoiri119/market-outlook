@@ -48,6 +48,15 @@ class MorningOutlookOut(BaseModel):
     us_detail: str | None = None
     us_market: dict | None = None
     narrative: str | None = None
+    expected_range_low: float | None = None
+    expected_range_high: float | None = None
+    expected_open_low: float | None = None
+    expected_open_high: float | None = None
+    nikkei_ma25: float | None = None
+    nikkei_vs_ma25: float | None = None
+    vix_regime: str | None = None
+    actual_move: float | None = None
+    hit: bool | None = None
 
 
 class OutlookRunResultOut(BaseModel):

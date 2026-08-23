@@ -97,12 +97,31 @@
   section.card h2 { font-size: 0.95rem; margin: 0 0 0.75rem; color: var(--muted); font-weight: 600; }
   .narrative { white-space: pre-wrap; line-height: 1.7; font-size: 0.92rem; }
 
+  .range-line { margin: 0.35rem 0 0.15rem; font-size: 0.95rem; }
+  .range-line b { font-weight: 700; }
+
+  /* context + accuracy grids */
+  .ctx-grid, .acc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 0.75rem; }
+  .ctx-item, .acc-item { background: var(--panel-2); border-radius: 12px; padding: 0.8rem 0.9rem; }
+  .ctx-item .k, .acc-item .k { font-size: 0.72rem; color: var(--muted); display: block; }
+  .ctx-item .v, .acc-item .v { font-size: 1.4rem; font-weight: 800; }
+  .ctx-item .v.pos, .acc-item .v.pos { color: var(--up); }
+  .ctx-item .v.neg, .acc-item .v.neg { color: var(--down); }
+  .ctx-item .note, .acc-item .note { font-size: 0.72rem; color: var(--muted); display: block; margin-top: 0.15rem; }
+
   svg { width: 100%; height: 220px; display: block; }
   .axis { stroke: var(--line); stroke-width: 1; }
   .zero { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; opacity: 0.6; }
   .spark { fill: none; stroke: var(--accent); stroke-width: 2; }
+  .spark2 { fill: none; stroke: #f59e0b; stroke-width: 2; stroke-dasharray: 5 3; }
   .dot { fill: var(--accent); }
+  .dot2 { fill: #f59e0b; }
   .glabel { fill: var(--muted); font-size: 10px; }
+  .legend { display: flex; gap: 0.9rem; font-size: 0.78rem; color: var(--muted); }
+  .legend .lg { display: flex; align-items: center; gap: 0.3rem; }
+  .legend .sw { width: 16px; height: 3px; border-radius: 2px; display: inline-block; }
+  .legend .sw1 { background: var(--accent); }
+  .legend .sw2 { background: #f59e0b; }
 
   /* US market section */
   .us-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
@@ -185,6 +204,7 @@ function renderHero(o) {
         <span class="arrow">→</span>
         <span>予想寄り ${num(o.implied_open_level)}</span>
       </div>
+      ${o.expected_open_low != null && o.expected_open_high != null ? `<div class="range-line">予想レンジ <b>${num(o.expected_open_low)} 〜 ${num(o.expected_open_high)}</b> <span class="muted">(${pct(o.expected_range_low)} 〜 ${pct(o.expected_range_high)})</span></div>` : ""}
       <div class="grid">
         <div class="cell"><span class="k">先物ギャップ(主指標)</span><span class="v ${sign(o.implied_gap)}">${pct(o.implied_gap)}</span></div>
         <div class="cell"><span class="k">回帰モデル予測</span><span class="v ${sign(o.model_return)}">${pct(o.model_return)}</span></div>
@@ -236,11 +256,77 @@ function renderUS(o) {
     }),
     usItem("USD/JPY", { display: m.usdjpy_return != null ? pct(m.usdjpy_return) : null, colorBy: m.usdjpy_return, note: fxNote }),
   ].join("");
+
+  // Extra overnight indicators a JP investor checks pre-open.
+  const hasExtra = m.sox_return != null || m.us10y_level != null || m.wti_return != null;
+  const extraItems = [
+    usItem("SOX半導体指数", {
+      display: m.sox_return != null ? pct(m.sox_return) : null, colorBy: m.sox_return,
+      note: "東エレク・アドバンテスト等に影響",
+    }),
+    usItem("米10年債利回り", {
+      display: m.us10y_level != null ? m.us10y_level.toFixed(2) + "%" : null,
+      colorBy: m.us10y_change_bp, invert: true,
+      note: m.us10y_change_bp != null ? `前日比 ${signedPts(m.us10y_change_bp, 0)}bp` : "",
+    }),
+    usItem("WTI原油", {
+      display: m.wti_return != null ? pct(m.wti_return) : null, colorBy: m.wti_return,
+      note: m.wti_level != null ? `$${m.wti_level.toFixed(1)}` : "",
+    }),
+  ].join("");
+  const extraBlock = hasExtra
+    ? `<h2 style="margin:1rem 0 0">その他オーバーナイト</h2><div class="us-grid">${extraItems}</div>`
+    : "";
+
   return `<section class="card">
     <div class="us-head"><h2 style="margin:0">米国市場 前日動向 <span class="muted" style="font-weight:400">${dateTxt}</span></h2>
       <span class="sentiment ${sent}">${SENTIMENT_LABEL[sent] || ""}</span></div>
     <div class="us-grid">${items}</div>
+    ${extraBlock}
   </section>`;
+}
+
+const VIX_REGIME = {
+  calm: { label: "平穏", cls: "risk_on" },
+  watch: { label: "やや警戒", cls: "neutral" },
+  elevated: { label: "警戒", cls: "risk_off" },
+  fear: { label: "恐怖", cls: "risk_off" },
+};
+
+function renderContext(o) {
+  const bits = [];
+  if (o.nikkei_vs_ma25 != null) {
+    const above = o.nikkei_vs_ma25 >= 0;
+    const cls = above ? "pos" : "neg";
+    const trend = above ? "上昇基調(25日線の上)" : "調整局面(25日線の下)";
+    bits.push(`<div class="ctx-item"><span class="k">25日移動平均かい離</span>
+      <span class="v ${cls}">${above ? "▲" : "▼"} ${pct(Math.abs(o.nikkei_vs_ma25))}</span>
+      <span class="note">${trend}${o.nikkei_ma25 != null ? ` ・ 25日線 ${num(o.nikkei_ma25)}` : ""}</span></div>`);
+  }
+  if (o.vix_regime && VIX_REGIME[o.vix_regime]) {
+    const r = VIX_REGIME[o.vix_regime];
+    bits.push(`<div class="ctx-item"><span class="k">ボラティリティ地合い(VIX)</span>
+      <span class="sentiment ${r.cls}" style="display:inline-block;margin-top:.15rem">${r.label}</span></div>`);
+  }
+  if (!bits.length) return "";
+  return `<section class="card"><h2>市場コンテキスト</h2><div class="ctx-grid">${bits.join("")}</div></section>`;
+}
+
+function renderAccuracy(history) {
+  const scored = (history || []).filter(h => h.actual_move != null && h.expected_move != null);
+  if (!scored.length) {
+    return `<section class="card"><h2>予測精度</h2><div class="muted">実績データを蓄積中です(寄り付き実績が判明した翌営業日以降に的中率を表示します)。</div></section>`;
+  }
+  const recent = scored.slice(-20);
+  const hits = recent.filter(h => h.hit).length;
+  const rate = hits / recent.length;
+  const mae = recent.reduce((s, h) => s + Math.abs(h.expected_move - h.actual_move), 0) / recent.length;
+  const rateCls = rate >= 0.6 ? "pos" : rate < 0.5 ? "neg" : "";
+  return `<section class="card"><h2>予測精度(直近${recent.length}営業日)</h2>
+    <div class="acc-grid">
+      <div class="acc-item"><span class="k">方向 的中率</span><span class="v ${rateCls}">${(rate * 100).toFixed(0)}%</span><span class="note">${hits} / ${recent.length} 営業日</span></div>
+      <div class="acc-item"><span class="k">平均誤差(予想−実績)</span><span class="v">±${(mae * 100).toFixed(2)}%</span><span class="note">寄り付きギャップの絶対誤差</span></div>
+    </div></section>`;
 }
 
 function renderNarrative(o) {
@@ -251,28 +337,36 @@ function renderNarrative(o) {
 function renderChart(history) {
   const rows = history.slice().reverse(); // oldest -> newest
   if (rows.length < 2) return "";
-  const W = 960, H = 220, padL = 40, padR = 16, padT = 16, padB = 24;
-  const vals = rows.map(r => r.expected_move * 100);
-  let min = Math.min(...vals, 0), max = Math.max(...vals, 0);
+  const W = 960, H = 220, padL = 40, padR = 16, padT = 16, padB = 28;
+  const pred = rows.map(r => r.expected_move * 100);
+  const actual = rows.map(r => (r.actual_move != null ? r.actual_move * 100 : null));
+  const allVals = pred.concat(actual.filter(v => v != null), [0]);
+  let min = Math.min(...allVals), max = Math.max(...allVals);
   if (min === max) { min -= 1; max += 1; }
   const pad = (max - min) * 0.15 || 1; min -= pad; max += pad;
   const x = i => padL + (i * (W - padL - padR)) / (rows.length - 1);
   const y = v => padT + (H - padT - padB) * (1 - (v - min) / (max - min));
-  const pts = vals.map((v, i) => `${x(i)},${y(v)}`).join(" ");
+  const predPts = pred.map((v, i) => `${x(i)},${y(v)}`).join(" ");
+  const predDots = pred.map((v, i) => `<circle class="dot" cx="${x(i)}" cy="${y(v)}" r="2.5" />`).join("");
+  // Actual line: only across points that have a realized value (may have gaps at the end).
+  const actualSeg = actual.map((v, i) => (v != null ? `${x(i)},${y(v)}` : null)).filter(Boolean).join(" ");
+  const actualDots = actual.map((v, i) => (v != null ? `<circle class="dot2" cx="${x(i)}" cy="${y(v)}" r="2.5" />` : "")).join("");
   const zeroY = y(0);
-  const dots = vals.map((v, i) => `<circle class="dot" cx="${x(i)}" cy="${y(v)}" r="2.5" />`).join("");
   const firstLabel = rows[0].date.slice(5);
   const lastLabel = rows[rows.length - 1].date.slice(5);
+  const hasActual = actual.some(v => v != null);
+  const legend = `<span class="lg"><span class="sw sw1"></span>予測</span>${hasActual ? `<span class="lg"><span class="sw sw2"></span>実績(寄り付き)</span>` : ""}`;
   return `
   <section class="card">
-    <h2>アウトルック履歴(予想寄り付きリターン %)</h2>
+    <div class="us-head"><h2 style="margin:0">アウトルック履歴 予測 vs 実績(寄り付きリターン %)</h2><div class="legend">${legend}</div></div>
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
       <line class="axis" x1="${padL}" y1="${padT}" x2="${padL}" y2="${H - padB}" />
       <line class="zero" x1="${padL}" y1="${zeroY}" x2="${W - padR}" y2="${zeroY}" />
-      <polyline class="spark" points="${pts}" />
-      ${dots}
-      <text class="glabel" x="${padL}" y="${H - 6}">${firstLabel}</text>
-      <text class="glabel" x="${W - padR}" y="${H - 6}" text-anchor="end">${lastLabel}</text>
+      ${actualSeg ? `<polyline class="spark2" points="${actualSeg}" />` : ""}
+      <polyline class="spark" points="${predPts}" />
+      ${actualDots}${predDots}
+      <text class="glabel" x="${padL}" y="${H - 8}">${firstLabel}</text>
+      <text class="glabel" x="${W - padR}" y="${H - 8}" text-anchor="end">${lastLabel}</text>
       <text class="glabel" x="4" y="${y(max) + 4}">${max.toFixed(2)}</text>
       <text class="glabel" x="4" y="${y(min) + 4}">${min.toFixed(2)}</text>
     </svg>
@@ -285,7 +379,13 @@ function renderInto(o, history, updatedText) {
     content.innerHTML = `<div class="empty">まだアウトルックがありません。「最新データで再計算」を押してください。</div>`;
     return;
   }
-  content.innerHTML = renderHero(o) + renderUS(o) + renderNarrative(o) + renderChart(history || []);
+  content.innerHTML =
+    renderHero(o) +
+    renderAccuracy(history || []) +
+    renderContext(o) +
+    renderUS(o) +
+    renderNarrative(o) +
+    renderChart(history || []);
   document.getElementById("updated").textContent = updatedText;
 }
 

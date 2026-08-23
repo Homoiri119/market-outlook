@@ -11,15 +11,15 @@ import datetime as dt
 import logging
 
 import pandas as pd
-import yfinance as yf
 from sklearn.linear_model import LinearRegression
 
 from app.clients.us_market_client import (
-    NIKKEI_INDEX_TICKER,
+    fetch_nikkei_ohlc,
     fetch_overnight_snapshot,
     fetch_us_market_history,
 )
 from app.config import settings
+from app.services import analytics
 from app.services.morning_outlook import (
     FEATURE_COLUMNS,
     _build_narrative,
@@ -42,31 +42,19 @@ def _feature_frame(start: dt.date, end: dt.date) -> pd.DataFrame:
     return df.dropna(subset=[c for c in FEATURE_COLUMNS if c in df.columns])
 
 
-def _nikkei_next_return_frame(start: dt.date, end: dt.date) -> pd.DataFrame:
-    try:
-        data = yf.Ticker(NIKKEI_INDEX_TICKER).history(
-            start=start.isoformat(),
-            end=(end + dt.timedelta(days=1)).isoformat(),
-            interval="1d",
-        )
-    except Exception:
-        logger.exception("Failed to fetch Nikkei history")
+def _next_return_frame(nikkei_ohlc: pd.DataFrame) -> pd.DataFrame:
+    """From Nikkei OHLC, build (feature_date -> next-session return) for training."""
+    if nikkei_ohlc.empty:
         return pd.DataFrame()
-    if data.empty:
-        return pd.DataFrame()
-    close = data["Close"].dropna()
-    df = pd.DataFrame({"date": [i.date() for i in close.index], "close": close.values})
-    df["date"] = pd.to_datetime(df["date"])
-    df = df.sort_values("date")
+    df = nikkei_ohlc.sort_values("date").copy()
     df["nikkei_return"] = df["close"].pct_change()
     df["feature_date"] = df["date"].shift(1)
     out = df[["feature_date", "nikkei_return"]].dropna(subset=["feature_date"])
     return out.rename(columns={"feature_date": "date"})
 
 
-def _train(start: dt.date, end: dt.date) -> tuple[float | None, float]:
-    features = _feature_frame(start, end)
-    nikkei = _nikkei_next_return_frame(start, end)
+def _train(features: pd.DataFrame, nikkei_ohlc: pd.DataFrame) -> tuple[float | None, float]:
+    nikkei = _next_return_frame(nikkei_ohlc)
     if features.empty or nikkei.empty:
         return None, 0.0
     merged = pd.merge(features, nikkei, on="date", how="inner").dropna(
@@ -85,7 +73,10 @@ def _train(start: dt.date, end: dt.date) -> tuple[float | None, float]:
 
 def compute_stateless_outlook(date: dt.date | None = None) -> dict:
     """Compute the morning outlook without any database, returning a dict with the
-    same shape as the MorningOutlook API model (plus `us_market`)."""
+    same shape as the MorningOutlook API model plus enrichments (`us_market`, expected
+    range, trend context). The returned dict also carries `actual_gaps` (a date->gap
+    map) so the caller can backfill prediction-accuracy history; strip it before
+    persisting the outlook itself."""
     date = date or dt.date.today()
     end = date
     start = end - dt.timedelta(days=settings.history_days)
@@ -94,6 +85,10 @@ def compute_stateless_outlook(date: dt.date | None = None) -> dict:
     us = snapshot.get("us")
     nikkei_prev = snapshot.get("nikkei_prev")
     futures = snapshot.get("futures")
+    extra = snapshot.get("extra") or {}
+
+    nikkei_ohlc = fetch_nikkei_ohlc(start, end)
+    features = _feature_frame(start, end)
 
     nikkei_prev_close = nikkei_prev.get("close") if nikkei_prev else None
     nikkei_futures = futures.get("price") if futures else None
@@ -102,7 +97,7 @@ def compute_stateless_outlook(date: dt.date | None = None) -> dict:
     if nikkei_prev_close and nikkei_futures:
         implied_gap = (nikkei_futures - nikkei_prev_close) / nikkei_prev_close
 
-    model_return, r2 = _train(start, end)
+    model_return, r2 = _train(features, nikkei_ohlc)
 
     if implied_gap is None and model_return is None:
         raise RuntimeError("No Nikkei futures data and not enough history to train the model.")
@@ -123,7 +118,14 @@ def compute_stateless_outlook(date: dt.date | None = None) -> dict:
         nikkei_prev_close * (1 + expected_move) if nikkei_prev_close else nikkei_futures
     )
 
-    return {
+    # Enrichments: expected range from recent gap volatility, trend & vol regime.
+    actual_gaps = analytics.compute_actual_gaps(nikkei_ohlc)
+    recent_gaps = [actual_gaps[d] for d in sorted(actual_gaps)]
+    range_low, range_high = analytics.expected_range(expected_move, recent_gaps)
+    context = analytics.nikkei_context(nikkei_ohlc)
+    vix_close = us.get("vix_close") if us else None
+
+    result = {
         "date": date.isoformat(),
         "direction": direction,
         "expected_move": float(expected_move),
@@ -134,8 +136,15 @@ def compute_stateless_outlook(date: dt.date | None = None) -> dict:
         "nikkei_futures": nikkei_futures,
         "implied_open_level": implied_open_level,
         "futures_source": futures_source,
+        "expected_range_low": range_low,
+        "expected_range_high": range_high,
+        "expected_open_low": nikkei_prev_close * (1 + range_low) if nikkei_prev_close else None,
+        "expected_open_high": nikkei_prev_close * (1 + range_high) if nikkei_prev_close else None,
+        "nikkei_ma25": context.get("ma25"),
+        "nikkei_vs_ma25": context.get("vs_ma25"),
+        "vix_regime": analytics.vix_regime(vix_close),
         "us_detail": _format_us_detail(us),
-        "us_market": us_market_struct(us),
+        "us_market": us_market_struct(us, extra),
         "narrative": _build_narrative(
             direction=direction,
             expected_move=expected_move,
@@ -145,4 +154,6 @@ def compute_stateless_outlook(date: dt.date | None = None) -> dict:
             implied_open_level=implied_open_level,
             us=us,
         ),
+        "actual_gaps": actual_gaps,
     }
+    return result

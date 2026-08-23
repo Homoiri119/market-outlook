@@ -27,6 +27,17 @@ NIKKEI_INDEX_TICKER = "^N225"
 # US close and are the market's own estimate of where Tokyo will open.
 NIKKEI_FUTURES_TICKERS = ["NIY=F", "NKD=F"]
 
+# Extra overnight indicators a JP investor checks pre-open. Each entry is a list of
+# fallback tickers tried in order.
+#  - sox: Philadelphia Semiconductor Index (drives Tokyo semis: TEL, Advantest, ...)
+#  - us10y: US 10Y Treasury yield (quoted in percent by ^TNX)
+#  - wti: WTI crude oil front-month future
+EXTRA_TICKERS = {
+    "sox": ["^SOX", "SOXX"],
+    "us10y": ["^TNX"],
+    "wti": ["CL=F"],
+}
+
 
 def fetch_us_market_history(start: dt.date, end: dt.date) -> pd.DataFrame:
     """Return a DataFrame indexed by date with columns:
@@ -142,12 +153,65 @@ def fetch_nikkei_futures() -> dict | None:
     return None
 
 
+def fetch_extra_overnight() -> dict:
+    """Fetch extra overnight indicators (SOX semis, US 10Y yield, WTI crude).
+    Returns a flat dict; missing pieces are simply absent."""
+    out: dict = {}
+    for name, tickers in EXTRA_TICKERS.items():
+        for ticker in tickers:
+            try:
+                data = yf.Ticker(ticker).history(period="8d", interval="1d")
+            except Exception:  # pragma: no cover - network dependent
+                logger.exception("Failed to fetch %s (%s)", name, ticker)
+                continue
+            if data.empty:
+                continue
+            close = data["Close"].dropna()
+            if close.empty:
+                continue
+            out[f"{name}_level"] = float(close.iloc[-1])
+            if len(close) >= 2:
+                prev = float(close.iloc[-2])
+                if name == "us10y":
+                    # yield change in basis points (^TNX is quoted in percent)
+                    out["us10y_change_bp"] = (float(close.iloc[-1]) - prev) * 100.0
+                else:
+                    out[f"{name}_return"] = float(close.iloc[-1]) / prev - 1 if prev else None
+            break  # first working ticker wins
+    return out
+
+
+def fetch_nikkei_ohlc(start: dt.date, end: dt.date) -> pd.DataFrame:
+    """Return Nikkei 225 cash-index daily OHLC as a DataFrame with columns
+    date (datetime64), open, close. Empty on failure."""
+    try:
+        data = yf.Ticker(NIKKEI_INDEX_TICKER).history(
+            start=start.isoformat(),
+            end=(end + dt.timedelta(days=1)).isoformat(),
+            interval="1d",
+        )
+    except Exception:  # pragma: no cover - network dependent
+        logger.exception("Failed to fetch Nikkei 225 OHLC")
+        return pd.DataFrame()
+    if data.empty:
+        return pd.DataFrame()
+    df = pd.DataFrame(
+        {
+            "date": pd.to_datetime([idx.date() for idx in data.index]),
+            "open": data["Open"].to_numpy(),
+            "close": data["Close"].to_numpy(),
+        }
+    )
+    return df.dropna(subset=["close"]).sort_values("date").reset_index(drop=True)
+
+
 def fetch_overnight_snapshot(reference_date: dt.date | None = None) -> dict:
     """Bundle everything needed for the pre-open morning outlook:
-    the latest US market row, the previous Nikkei cash close, and the current
-    Nikkei futures price. Any piece may be None if its source is unavailable."""
+    the latest US market row, the previous Nikkei cash close, the current Nikkei
+    futures price, and extra overnight indicators. Any piece may be None/empty."""
     return {
         "us": fetch_latest_us_market(reference_date),
         "nikkei_prev": fetch_nikkei_prev_close(reference_date),
         "futures": fetch_nikkei_futures(),
+        "extra": fetch_extra_overnight(),
     }

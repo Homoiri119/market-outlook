@@ -20,6 +20,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.clients.discord_notifier import send_discord_message  # noqa: E402
+from app.services import analytics  # noqa: E402
 from app.services.cloud_outlook import compute_stateless_outlook  # noqa: E402
 from app.services.morning_outlook import DIRECTION_LABELS_JP  # noqa: E402
 
@@ -47,7 +48,7 @@ def _pct(v, d=2):
     return "N/A" if v is None else f"{v * 100:.{d}f}%"
 
 
-def format_brief(o: dict) -> str:
+def format_brief(o: dict, accuracy: dict | None = None) -> str:
     emoji = DIRECTION_EMOJI.get(o["direction"], "")
     label = DIRECTION_LABELS_JP.get(o["direction"], o["direction"])
     lines = [
@@ -58,6 +59,16 @@ def format_brief(o: dict) -> str:
     if o.get("implied_open_level") and o.get("nikkei_prev_close"):
         lines.append(
             f"日経225: 前日終値 {o['nikkei_prev_close']:,.0f} → 予想寄り {o['implied_open_level']:,.0f} 近辺"
+        )
+    if o.get("expected_open_low") and o.get("expected_open_high"):
+        lines.append(
+            f"予想レンジ: {o['expected_open_low']:,.0f} 〜 {o['expected_open_high']:,.0f} "
+            f"({_pct(o['expected_range_low'])} 〜 {_pct(o['expected_range_high'])})"
+        )
+    if accuracy and accuracy.get("hit_rate") is not None:
+        lines.append(
+            f"直近{accuracy['n']}営業日 方向的中率: {accuracy['hit_rate'] * 100:.0f}% "
+            f"({accuracy['hits']}/{accuracy['n']}), 平均誤差 ±{accuracy['mae'] * 100:.2f}%"
         )
     if o.get("us_detail"):
         lines.append(o["us_detail"])
@@ -76,9 +87,21 @@ def load_history() -> list[dict]:
     return []
 
 
-def update_history(o: dict) -> list[dict]:
-    history = [h for h in load_history() if h.get("date") != o["date"]]
-    history.append({"date": o["date"], "direction": o["direction"], "expected_move": o["expected_move"]})
+def update_history(o: dict, actual_gaps: dict[str, float]) -> list[dict]:
+    history = load_history()
+    # Backfill realized opens for past predictions now that they are known.
+    analytics.backfill_history_actuals(history, actual_gaps)
+    # Upsert today's entry, preserving any already-known actual.
+    existing = next((h for h in history if h.get("date") == o["date"]), None)
+    entry = existing or {"date": o["date"]}
+    entry["direction"] = o["direction"]
+    entry["expected_move"] = o["expected_move"]
+    entry.setdefault("actual_move", actual_gaps.get(o["date"]))
+    entry.setdefault("hit", None)
+    if entry.get("actual_move") is not None and entry.get("hit") is None:
+        entry["hit"] = analytics.directional_hit(o["expected_move"], entry["actual_move"])
+    if existing is None:
+        history.append(entry)
     history.sort(key=lambda h: h["date"])
     history = history[-120:]  # cap growth
     DOCS_DIR.mkdir(parents=True, exist_ok=True)
@@ -105,12 +128,18 @@ def render_site(o: dict, history: list[dict]) -> None:
 
 def main() -> int:
     outlook = compute_stateless_outlook()
+    actual_gaps = outlook.pop("actual_gaps", {})  # internal; not part of the stored outlook
     logger.info("Outlook: %s %s (conf %.2f)", outlook["direction"], _pct(outlook["expected_move"]), outlook["confidence"])
 
-    sent = send_discord_message(format_brief(outlook))
+    history = update_history(outlook, actual_gaps)
+    accuracy = analytics.accuracy_summary(history)
+    if accuracy.get("hit_rate") is not None:
+        logger.info("Accuracy (last %d): hit-rate %.0f%%, MAE %.2f%%",
+                    accuracy["n"], accuracy["hit_rate"] * 100, accuracy["mae"] * 100)
+
+    sent = send_discord_message(format_brief(outlook, accuracy))
     logger.info("Discord notification sent: %s", sent)
 
-    history = update_history(outlook)
     render_site(outlook, history)
     logger.info("Wrote docs/index.html and docs/history.json (%d points)", len(history))
     return 0

@@ -23,9 +23,10 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sqlalchemy.orm import Session
 
-from app.clients.us_market_client import fetch_overnight_snapshot
+from app.clients.us_market_client import fetch_nikkei_ohlc, fetch_overnight_snapshot
 from app.config import settings
 from app.models import MorningOutlook, PriceHistory
+from app.services import analytics
 from app.services.data_collector import NIKKEI_CODE
 from app.services.macro_analyzer import FEATURE_COLUMNS, _load_macro_df
 
@@ -106,11 +107,13 @@ def _classify(move: float) -> str:
     return "FLAT"
 
 
-def us_market_struct(us: dict | None) -> dict | None:
+def us_market_struct(us: dict | None, extra: dict | None = None) -> dict | None:
     """Build a JSON-safe, display-oriented structured view of the US market snapshot,
-    including a coarse risk-on / risk-off read used by the dashboards."""
+    including a coarse risk-on / risk-off read used by the dashboards. `extra` carries
+    the additional overnight indicators (SOX, US 10Y, WTI)."""
     if not us:
         return None
+    extra = extra or {}
     date = us.get("date")
     sp = us.get("sp500_return")
     vix_chg = us.get("vix_change")
@@ -136,6 +139,13 @@ def us_market_struct(us: dict | None) -> dict | None:
         "vix_change": vix_chg,
         "usdjpy_return": us.get("usdjpy_return"),
         "sentiment": sentiment,
+        # extra overnight indicators (may be absent)
+        "sox_return": extra.get("sox_return"),
+        "sox_level": extra.get("sox_level"),
+        "us10y_level": extra.get("us10y_level"),
+        "us10y_change_bp": extra.get("us10y_change_bp"),
+        "wti_return": extra.get("wti_return"),
+        "wti_level": extra.get("wti_level"),
     }
 
 
@@ -225,6 +235,7 @@ def compute_morning_outlook(db: Session, date: dt.date | None = None) -> Morning
     us = snapshot.get("us")
     nikkei_prev = snapshot.get("nikkei_prev")
     futures = snapshot.get("futures")
+    extra = snapshot.get("extra") or {}
 
     # Primary signal: overnight futures gap vs. the previous Nikkei cash close.
     implied_gap: float | None = None
@@ -269,6 +280,14 @@ def compute_morning_outlook(db: Session, date: dt.date | None = None) -> Morning
         us=us,
     )
 
+    # Enrichments: expected range, trend/vol context (from live Nikkei OHLC).
+    nikkei_ohlc = fetch_nikkei_ohlc(date - dt.timedelta(days=settings.history_days), date)
+    actual_gaps = analytics.compute_actual_gaps(nikkei_ohlc)
+    recent_gaps = [actual_gaps[d] for d in sorted(actual_gaps)]
+    range_low, range_high = analytics.expected_range(expected_move, recent_gaps)
+    context = analytics.nikkei_context(nikkei_ohlc)
+    vix_close = us.get("vix_close") if us else None
+
     record = db.query(MorningOutlook).filter(MorningOutlook.date == date).first()
     if record is None:
         record = MorningOutlook(date=date)
@@ -283,12 +302,45 @@ def compute_morning_outlook(db: Session, date: dt.date | None = None) -> Morning
     record.implied_open_level = implied_open_level
     record.futures_source = futures_source
     record.us_detail = us_detail
-    struct = us_market_struct(us)
+    struct = us_market_struct(us, extra)
     record.us_market_json = json.dumps(struct, ensure_ascii=False) if struct else None
     record.narrative = narrative
+    record.expected_range_low = range_low
+    record.expected_range_high = range_high
+    record.expected_open_low = nikkei_prev_close * (1 + range_low) if nikkei_prev_close else None
+    record.expected_open_high = nikkei_prev_close * (1 + range_high) if nikkei_prev_close else None
+    record.nikkei_ma25 = context.get("ma25")
+    record.nikkei_vs_ma25 = context.get("vs_ma25")
+    record.vix_regime = analytics.vix_regime(vix_close)
     db.commit()
     db.refresh(record)
+
+    _backfill_actuals(db, nikkei_ohlc)
+    db.refresh(record)
     return record
+
+
+def _backfill_actuals(db: Session, nikkei_ohlc=None) -> int:
+    """Fill actual_move / hit on past outlook records once the real Tokyo open is known.
+    Returns the number of records updated."""
+    if nikkei_ohlc is None:
+        end = dt.date.today()
+        nikkei_ohlc = fetch_nikkei_ohlc(end - dt.timedelta(days=settings.history_days), end)
+    actual_gaps = analytics.compute_actual_gaps(nikkei_ohlc)
+    if not actual_gaps:
+        return 0
+    updated = 0
+    rows = db.query(MorningOutlook).filter(MorningOutlook.actual_move.is_(None)).all()
+    for row in rows:
+        actual = actual_gaps.get(row.date.isoformat())
+        if actual is None:
+            continue
+        row.actual_move = actual
+        row.hit = analytics.directional_hit(row.expected_move, actual)
+        updated += 1
+    if updated:
+        db.commit()
+    return updated
 
 
 def get_latest_morning_outlook(db: Session) -> MorningOutlook | None:

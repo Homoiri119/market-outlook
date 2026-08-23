@@ -2,11 +2,15 @@
 {
 "date": "2026-08-20",
 "direction": "STRONG_DOWN",
-"expected_move": -0.008705540457816262
+"expected_move": -0.008705540457816262,
+"actual_move": 0.006220563989828962,
+"hit": false
 },
 {
 "date": "2026-08-23",
 "direction": "FLAT",
-"expected_move": 0.0006953345702645809
+"expected_move": 0.0006953345702645809,
+"actual_move": null,
+"hit": null
 }
 ]
