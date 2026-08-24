@@ -53,7 +53,14 @@ def main() -> int:
     # Universe: large caps by ScaleCat + watchlist codes.
     large = master[master["ScaleCat"].isin(SCALE_CATS)] if "ScaleCat" in master.columns else master.head(0)
     codes = list(dict.fromkeys(list(large["Code"].astype(str)) + _load_watchlist()))
-    info_by_code = {str(r["Code"]): r for _, r in master.iterrows()}
+    # Index master rows (as plain dicts) by both the full code and its 4-digit form,
+    # so 4-digit watchlist codes match 5-digit master codes.
+    info_by_code: dict[str, dict] = {}
+    for _, r in master.iterrows():
+        d = r.to_dict()
+        c = str(d.get("Code"))
+        info_by_code.setdefault(c, d)
+        info_by_code.setdefault(c[:4], d)
     logger.info("Universe size: %d (large caps %d + watchlist)", len(codes), len(large))
 
     results = []
