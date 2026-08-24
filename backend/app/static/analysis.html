@@ -73,9 +73,60 @@ let DATA = null, sortKey="direction", sortAsc=true;
 function n(v,d=0){return v==null?"—":Number(v).toLocaleString(undefined,{maximumFractionDigits:d});}
 function pct(v,d=1){return v==null?"—":(v*100).toFixed(d)+"%";}
 
+const CLR={up:"#22c55e",down:"#ef4444",accent:"#38bdf8",amber:"#f59e0b",muted:"#94a3b8",line:"#334155"};
+
+function chartSvg(s){
+  const c=s.chart; if(!c||!c.c||c.c.length<5) return "";
+  const W=920,H=280,padL=54,padR=64,padT=10,padB=22, n=c.c.length;
+  const lv=[s.entry,s.take_profit,s.stop_loss,s.pullback_entry].filter(v=>v!=null);
+  let lo=Math.min(...c.l.filter(v=>v!=null),...lv), hi=Math.max(...c.h.filter(v=>v!=null),...lv);
+  const pad=(hi-lo)*0.05||1; lo-=pad; hi+=pad;
+  const x=i=>padL+(i*(W-padL-padR))/(n-1);
+  const y=v=>padT+(H-padT-padB)*(1-(v-lo)/(hi-lo));
+  const cw=Math.max(2,(W-padL-padR)/n*0.62);
+  let candles="";
+  for(let i=0;i<n;i++){
+    if(c.c[i]==null)continue;
+    const up=c.c[i]>=c.o[i], col=up?CLR.up:CLR.down;
+    candles+=`<line x1="${x(i)}" y1="${y(c.h[i])}" x2="${x(i)}" y2="${y(c.l[i])}" stroke="${col}" stroke-width="1"/>`;
+    const yt=y(Math.max(c.o[i],c.c[i])), yb=y(Math.min(c.o[i],c.c[i]));
+    candles+=`<rect x="${x(i)-cw/2}" y="${yt}" width="${cw}" height="${Math.max(1,yb-yt)}" fill="${col}"/>`;
+  }
+  const line=(arr,col)=>{
+    let pts=[],seg="";
+    for(let i=0;i<n;i++){ if(arr[i]==null){continue;} pts.push(`${x(i)},${y(arr[i])}`); }
+    return pts.length>1?`<polyline points="${pts.join(" ")}" fill="none" stroke="${col}" stroke-width="1.4" opacity="0.9"/>`:"";
+  };
+  const hline=(v,col,label,dash)=>v==null?"":`<line x1="${padL}" y1="${y(v)}" x2="${W-padR}" y2="${y(v)}" stroke="${col}" stroke-width="1.2" ${dash?'stroke-dasharray="5 3"':''} opacity="0.9"/><text x="${W-padR+3}" y="${y(v)+3}" fill="${col}" font-size="10">${label} ${Number(v).toLocaleString()}</text>`;
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;margin:.3rem 0">
+    <text x="4" y="${y(hi)+8}" fill="${CLR.muted}" font-size="10">${Math.round(hi).toLocaleString()}</text>
+    <text x="4" y="${y(lo)-2}" fill="${CLR.muted}" font-size="10">${Math.round(lo).toLocaleString()}</text>
+    ${candles}
+    ${line(c.sma25,CLR.accent)}${line(c.sma75,CLR.amber)}
+    ${hline(s.entry,CLR.accent,"イン",false)}
+    ${hline(s.take_profit,CLR.up,"利確",true)}
+    ${hline(s.stop_loss,CLR.down,"損切",true)}
+    ${hline(s.pullback_entry,CLR.amber,"押し目",true)}
+    <text x="${padL}" y="${H-8}" fill="${CLR.muted}" font-size="9">${(c.dates[0]||"").slice(2)}</text>
+    <text x="${W-padR}" y="${H-8}" fill="${CLR.muted}" font-size="9" text-anchor="end">${(c.dates[c.dates.length-1]||"").slice(2)}</text>
+  </svg>
+  <div class="muted" style="font-size:.68rem">青=25日線 / 橙=75日線 ・ 実線=イン ・ 点線=利確(緑)/損切(赤)/押し目(橙)</div>`;
+}
+
+function timingBadge(s){
+  const map={pullback:["過熱→押し目待ち",CLR.amber],bounce:["売られすぎ→反発待ち",CLR.amber],wait:["方向確定待ち",CLR.muted],ok:["成行可",CLR.up]};
+  const [lbl,col]=map[s.timing]||map.ok;
+  return `<span style="border:1px solid ${col};color:${col};border-radius:999px;padding:.1rem .5rem;font-size:.72rem;font-weight:700">${lbl}</span>`;
+}
+
 function detailHtml(s){
   const ind=s.indicators||{}; const f=s.fundamentals;
   const rr=s.risk_reward!=null?`リスクリワード 1:${s.risk_reward}`:"";
+  const pb = s.pullback_entry!=null ? `<div class="levels" style="margin-top:.3rem">
+      <div class="lvl" style="border-color:${CLR.amber}"><div class="k">押し目イン(指値)</div><div class="v" style="color:${CLR.amber}">${n(s.pullback_entry,1)}</div><div class="k">${pct(s.pullback_pct)}(25日線)</div></div>
+      <div class="lvl tp"><div class="k">押し目 利確</div><div class="v">${n(s.pullback_take_profit,1)}</div></div>
+      <div class="lvl sl"><div class="k">押し目 損切り</div><div class="v">${n(s.pullback_stop_loss,1)}</div></div>
+    </div>` : "";
   const fund = f ? `<div class="grid2">
       <div class="cell"><span class="k">PER</span><span class="v">${f.per?f.per.toFixed(1)+"倍":"—"}</span></div>
       <div class="cell"><span class="k">PBR</span><span class="v">${f.pbr?f.pbr.toFixed(2)+"倍":"—"}</span></div>
@@ -88,12 +139,15 @@ function detailHtml(s){
       <div><span style="font-size:1.15rem;font-weight:800">${s.name}</span> <span class="muted">${s.code} ・ ${s.sector||""}</span></div>
       <span class="pill ${s.direction}">${DIRJP[s.direction]}</span>
     </div>
-    <div class="side">方向: <b>${s.side}</b> ・ 現値 ${n(s.current_price,1)} ・ ${rr}</div>
+    <div class="side">方向: <b>${s.side}</b> ・ 現値 ${n(s.current_price,1)} ・ ${rr} ・ ${timingBadge(s)}</div>
+    <div style="font-size:.78rem;color:var(--muted);margin:.2rem 0">${s.entry_note||""}</div>
+    ${chartSvg(s)}
     <div class="levels">
-      <div class="lvl entry"><div class="k">イン(エントリー)</div><div class="v">${n(s.entry,1)}</div></div>
+      <div class="lvl entry"><div class="k">イン(成行)</div><div class="v">${n(s.entry,1)}</div></div>
       <div class="lvl tp"><div class="k">利確(TP)</div><div class="v">${n(s.take_profit,1)}</div><div class="k">${pct(s.tp_pct)}</div></div>
       <div class="lvl sl"><div class="k">損切り(SL)</div><div class="v">${n(s.stop_loss,1)}</div><div class="k">${pct(s.sl_pct)}</div></div>
     </div>
+    ${pb}
     <div class="grid2">
       <div class="cell"><span class="k">RSI(14)</span><span class="v">${ind.rsi!=null?ind.rsi.toFixed(0):"—"}</span></div>
       <div class="cell"><span class="k">25日線乖離</span><span class="v ${ind.dev25>=0?'up':'down'}">${pct(ind.dev25)}</span></div>

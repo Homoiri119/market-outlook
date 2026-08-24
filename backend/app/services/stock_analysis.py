@@ -18,9 +18,20 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# ATR multiples for trade levels and the flat band for direction.
+# ATR multiples for trade levels.
 SL_ATR = 1.5
 TP_ATR = 2.5
+
+# Direction scoring weights (tunable).
+W_TREND_STRONG = 2   # price > 25MA > 75MA (or mirror)
+W_TREND_WEAK = 1     # price vs 25MA only
+W_SHORT = 1          # 5MA short-term momentum
+W_MACD = 1
+W_RSI = 1            # RSI in the 45-70 / 30-55 bands
+W_HIGH = 1           # within 3% of the 52w high
+BUY_TH = 3           # score >= BUY_TH -> BUY ; >=1 -> WEAK_BUY (mirror for sells)
+
+CHART_DAYS = 70      # recent bars embedded for the detail chart
 
 DIRECTION_JP = {
     "BUY": "買い", "WEAK_BUY": "やや買い", "NEUTRAL": "中立",
@@ -104,51 +115,59 @@ def compute_indicators(bars: pd.DataFrame) -> dict:
     }
 
 
-def _direction(ind: dict) -> tuple[str, int, list[str]]:
-    """Score trend + momentum into a direction, with human-readable reasons."""
+def _direction(ind: dict) -> tuple[str, int, list[str], bool, bool]:
+    """Score trend + momentum into a direction. Returns (direction, score, reasons,
+    overbought, oversold). RSI extremes set the overbought/oversold flags (used for
+    entry timing) rather than flipping the trend score."""
     score = 0
     reasons: list[str] = []
-    price, s25, s75 = ind["price"], ind.get("sma25"), ind.get("sma75")
+    price, s5, s25, s75 = ind["price"], ind.get("sma5"), ind.get("sma25"), ind.get("sma75")
     if s25 and s75:
         if price > s25 > s75:
-            score += 2; reasons.append("株価 > 25日線 > 75日線(上昇トレンド)")
+            score += W_TREND_STRONG; reasons.append("株価 > 25日線 > 75日線(上昇トレンド)")
         elif price < s25 < s75:
-            score -= 2; reasons.append("株価 < 25日線 < 75日線(下降トレンド)")
+            score -= W_TREND_STRONG; reasons.append("株価 < 25日線 < 75日線(下降トレンド)")
         elif price > s25:
-            score += 1; reasons.append("株価が25日線の上")
+            score += W_TREND_WEAK; reasons.append("株価が25日線の上")
         elif price < s25:
-            score -= 1; reasons.append("株価が25日線の下")
+            score -= W_TREND_WEAK; reasons.append("株価が25日線の下")
+    if s5 and s25:
+        if price > s5 > s25:
+            score += W_SHORT; reasons.append("短期(5日線)も上向き")
+        elif price < s5 < s25:
+            score -= W_SHORT; reasons.append("短期(5日線)も下向き")
     hist = ind.get("macd_hist")
     if hist is not None:
         if hist > 0:
-            score += 1; reasons.append("MACDが上向き(シグナル上)")
+            score += W_MACD; reasons.append("MACDが上向き(シグナル上)")
         else:
-            score -= 1; reasons.append("MACDが下向き(シグナル下)")
+            score -= W_MACD; reasons.append("MACDが下向き(シグナル下)")
     rsi = ind.get("rsi")
+    overbought = oversold = False
     if rsi is not None:
         if rsi >= 70:
-            score -= 1; reasons.append(f"RSI {rsi:.0f}(買われすぎ・過熱)")
+            overbought = True; reasons.append(f"RSI {rsi:.0f}(買われすぎ・過熱)")
         elif rsi <= 30:
-            score += 1; reasons.append(f"RSI {rsi:.0f}(売られすぎ・反発余地)")
+            oversold = True; reasons.append(f"RSI {rsi:.0f}(売られすぎ)")
         elif rsi >= 55:
-            score += 1; reasons.append(f"RSI {rsi:.0f}(強い)")
+            score += W_RSI; reasons.append(f"RSI {rsi:.0f}(強い)")
         elif rsi <= 45:
-            score -= 1; reasons.append(f"RSI {rsi:.0f}(弱い)")
+            score -= W_RSI; reasons.append(f"RSI {rsi:.0f}(弱い)")
     pfh = ind.get("pct_from_high")
     if pfh is not None and pfh >= -0.03:
-        score += 1; reasons.append("年初来高値圏(±3%)")
+        score += W_HIGH; reasons.append("年初来高値圏(±3%)")
 
-    if score >= 3:
+    if score >= BUY_TH:
         d = "BUY"
     elif score >= 1:
         d = "WEAK_BUY"
-    elif score <= -3:
+    elif score <= -BUY_TH:
         d = "SELL"
     elif score <= -1:
         d = "WEAK_SELL"
     else:
         d = "NEUTRAL"
-    return d, score, reasons
+    return d, score, reasons, overbought, oversold
 
 
 def _trade_levels(direction: str, ind: dict) -> dict:
@@ -174,6 +193,17 @@ def _trade_levels(direction: str, ind: dict) -> dict:
         resistance = ind.get("swing_high_10")   # potential TP zone
 
     rr = abs(tp - entry) / abs(entry - sl) if entry != sl else None
+
+    # Pullback (指値) entry: the 25-day MA is the natural pull-in for a long above it
+    # (or the rally-to-sell level for a short below it). Levels recomputed from there.
+    s25 = ind.get("sma25")
+    pb_entry = pb_tp = pb_sl = None
+    if s25:
+        if not bearish and price > s25:      # long: buy the dip to 25MA
+            pb_entry = s25; pb_sl = s25 - SL_ATR * atr; pb_tp = s25 + TP_ATR * atr
+        elif bearish and price < s25:        # short: sell the rally to 25MA
+            pb_entry = s25; pb_sl = s25 + SL_ATR * atr; pb_tp = s25 - TP_ATR * atr
+
     return {
         "side": side,
         "entry": _round_price(entry),
@@ -184,6 +214,10 @@ def _trade_levels(direction: str, ind: dict) -> dict:
         "tp_pct": (tp / entry - 1) if entry else None,
         "support": _round_price(support) if support else None,
         "resistance": _round_price(resistance) if resistance else None,
+        "pullback_entry": _round_price(pb_entry) if pb_entry else None,
+        "pullback_take_profit": _round_price(pb_tp) if pb_tp else None,
+        "pullback_stop_loss": _round_price(pb_sl) if pb_sl else None,
+        "pullback_pct": (pb_entry / price - 1) if pb_entry else None,
     }
 
 
@@ -217,13 +251,50 @@ def extract_fundamentals(statements: list[dict], price: float, mkt_cap: float | 
     return out
 
 
+def _build_chart(bars: pd.DataFrame) -> dict:
+    df = bars.sort_index()
+    close = df["close"]
+    sma25 = close.rolling(25).mean()
+    sma75 = close.rolling(75).mean()
+    tail = df.tail(CHART_DAYS)
+    idx = tail.index
+
+    def r(x):
+        if x is None or pd.isna(x):
+            return None
+        return round(float(x), 1) if float(x) < 1000 else round(float(x))
+
+    return {
+        "dates": [d.isoformat() for d in idx],
+        "o": [r(v) for v in tail["open"]],
+        "h": [r(v) for v in tail["high"]],
+        "l": [r(v) for v in tail["low"]],
+        "c": [r(v) for v in tail["close"]],
+        "sma25": [r(v) for v in sma25.tail(CHART_DAYS)],
+        "sma75": [r(v) for v in sma75.tail(CHART_DAYS)],
+    }
+
+
+def _timing(direction: str, overbought: bool, oversold: bool) -> tuple[str, str]:
+    bullish = direction in ("BUY", "WEAK_BUY")
+    bearish = direction in ("SELL", "WEAK_SELL")
+    if bullish and overbought:
+        return "pullback", "過熱(RSI≥70)。押し目待ちを推奨(下の指値候補)"
+    if bearish and oversold:
+        return "bounce", "売られすぎ(RSI≤30)。戻り売り/反発待ち"
+    if direction == "NEUTRAL":
+        return "wait", "中立。方向確定待ち"
+    return "ok", "成行エントリー可"
+
+
 def analyze_stock(code: str, name: str, sector: str, bars: pd.DataFrame,
                   statements: list[dict] | None = None) -> dict | None:
     if bars is None or bars.empty or len(bars) < 30:
         return None
     ind = compute_indicators(bars)
-    direction, score, reasons = _direction(ind)
+    direction, score, reasons, overbought, oversold = _direction(ind)
     levels = _trade_levels(direction, ind)
+    timing, entry_note = _timing(direction, overbought, oversold)
     fundamentals = None
     try:
         if statements:
@@ -235,8 +306,10 @@ def analyze_stock(code: str, name: str, sector: str, bars: pd.DataFrame,
         "code": code, "name": name, "sector": sector,
         "direction": direction, "direction_jp": DIRECTION_JP[direction], "score": score,
         "current_price": _round_price(ind["price"]),
+        "timing": timing, "entry_note": entry_note,
         **levels,
         "indicators": ind,
         "reasons": reasons,
         "fundamentals": fundamentals,
+        "chart": _build_chart(bars),
     }
