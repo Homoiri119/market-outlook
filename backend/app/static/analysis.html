@@ -51,6 +51,7 @@
   <nav class="topnav" style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:1rem;font-size:.85rem">
     <a href="./index.html" style="color:#e2e8f0;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:.4rem .7rem">🗾 アウトルック</a>
     <a href="./analysis.html" style="color:#e2e8f0;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:.4rem .7rem">🔎 個別銘柄</a>
+    <a href="./news.html" style="color:#e2e8f0;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:.4rem .7rem">📰 ニュース</a>
     <a href="./stock_strategy.html" style="color:#e2e8f0;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:.4rem .7rem">🧪 戦略検証</a>
     <a href="./backtest.html" style="color:#e2e8f0;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:.4rem .7rem">📊 バックテスト</a>
     <a href="./sector_backtest.html" style="color:#e2e8f0;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:.4rem .7rem">🏭 セクター</a>
@@ -114,6 +115,7 @@ function chartSvg(s){
     ${hline(s.entry,CLR.accent,"イン",false)}
     ${hline(s.take_profit,CLR.up,"利確",true)}
     ${hline(s.stop_loss,CLR.down,"損切",true)}
+    ${hline(s.trail_stop,"#a78bfa","トレール",true)}
     ${hline(s.pullback_entry,CLR.amber,"押し目",true)}
     <text x="${padL}" y="${H-8}" fill="${CLR.muted}" font-size="9">${(c.dates[0]||"").slice(2)}</text>
     <text x="${W-padR}" y="${H-8}" fill="${CLR.muted}" font-size="9" text-anchor="end">${(c.dates[c.dates.length-1]||"").slice(2)}</text>
@@ -135,6 +137,11 @@ function detailHtml(s){
       <div class="lvl tp"><div class="k">押し目 利確</div><div class="v">${n(s.pullback_take_profit,1)}</div></div>
       <div class="lvl sl"><div class="k">押し目 損切り</div><div class="v">${n(s.pullback_stop_loss,1)}</div></div>
     </div>` : "";
+  const trail = s.trail_stop!=null ? `<div class="levels" style="margin-top:.3rem">
+      <div class="lvl" style="border-color:#a78bfa"><div class="k">トレーリング初期損切り<span style="color:#a78bfa">(推奨)</span></div><div class="v" style="color:#a78bfa">${n(s.trail_stop,1)}</div><div class="k">${pct(s.trail_pct)} ・ 高値更新で切り上げ</div></div>
+      <div class="lvl" style="border-color:var(--muted)"><div class="k">トレール利確</div><div class="v" style="color:var(--muted)">なし(利を伸ばす)</div></div>
+    </div>
+    <div class="muted" style="font-size:.72rem;margin-top:.2rem">💡 バックテストではトレーリング(高値−2.5×ATR追随)が期待値・PF最良。固定TPで利確 or トレールで利を伸ばす、どちらかを選択。</div>` : "";
   const fund = f ? `<div class="grid2">
       <div class="cell"><span class="k">PER</span><span class="v">${f.per?f.per.toFixed(1)+"倍":"—"}</span></div>
       <div class="cell"><span class="k">PBR</span><span class="v">${f.pbr?f.pbr.toFixed(2)+"倍":"—"}</span></div>
@@ -156,6 +163,7 @@ function detailHtml(s){
       <div class="lvl sl"><div class="k">損切り(SL)</div><div class="v">${n(s.stop_loss,1)}</div><div class="k">${pct(s.sl_pct)}</div></div>
     </div>
     ${pb}
+    ${trail}
     <div class="grid2">
       <div class="cell"><span class="k">RSI(14)</span><span class="v">${ind.rsi!=null?ind.rsi.toFixed(0):"—"}</span></div>
       <div class="cell"><span class="k">25日線乖離</span><span class="v ${ind.dev25>=0?'up':'down'}">${pct(ind.dev25)}</span></div>

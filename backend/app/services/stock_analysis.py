@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 # ATR multiples for trade levels.
 SL_ATR = 1.5
 TP_ATR = 2.5
+TRAIL_ATR = 2.5   # chandelier trailing stop (backtest: best expectancy/PF)
 
 # Direction scoring weights (tunable).
 W_TREND_STRONG = 2   # price > 25MA > 75MA (or mirror)
@@ -218,6 +219,9 @@ def _trade_levels(direction: str, ind: dict) -> dict:
         "pullback_take_profit": _round_price(pb_tp) if pb_tp else None,
         "pullback_stop_loss": _round_price(pb_sl) if pb_sl else None,
         "pullback_pct": (pb_entry / price - 1) if pb_entry else None,
+        # Trailing (chandelier) initial stop — ratchets up on new highs; no fixed TP.
+        "trail_stop": _round_price(price - TRAIL_ATR * atr) if not bearish else _round_price(price + TRAIL_ATR * atr),
+        "trail_pct": (-TRAIL_ATR * atr / price) if not bearish else (TRAIL_ATR * atr / price),
     }
 
 
