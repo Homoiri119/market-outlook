@@ -61,3 +61,14 @@ def dashboard() -> FileResponse:
 def backtest_page() -> FileResponse:
     """Serve the backtest page (falls back to /api/backtest for data in live mode)."""
     return FileResponse(STATIC_DIR / "backtest.html")
+
+
+@app.get("/analysis.html", include_in_schema=False)
+def analysis_page() -> FileResponse:
+    """Serve the per-stock analysis page."""
+    return FileResponse(STATIC_DIR / "analysis.html")
+
+
+@app.get("/sector_backtest.html", include_in_schema=False)
+def sector_backtest_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "sector_backtest.html")

@@ -133,6 +133,15 @@ class JQuantsClient:
         rows = self._get_paginated("/equities/master", params, "data")
         return pd.DataFrame(rows)
 
+    def fetch_statements(self, code: str) -> list[dict]:
+        """Fetch financial statements for a stock (V2 /fins/statements). Returns the
+        raw rows (newest last), or [] if the plan does not include this endpoint."""
+        try:
+            return self._get_paginated("/fins/statements", {"code": code}, "data")
+        except Exception:
+            logger.info("fins/statements unavailable for %s (plan?)", code, exc_info=True)
+            return []
+
     def fetch_daily_quotes(self, code: str, start: dt.date, end: dt.date) -> pd.DataFrame:
         """Fetch split-adjusted daily OHLC for a stock via V2 /equities/bars/daily.
         Uses adjusted prices (AdjO/AdjH/AdjL/AdjC). Returns a DataFrame indexed by date."""

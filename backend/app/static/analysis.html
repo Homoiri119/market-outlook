@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>個別銘柄 分析 | 寄り付き前アウトルック</title>
+<style>
+  :root{--bg:#0f172a;--panel:#1e293b;--panel-2:#273449;--text:#e2e8f0;--muted:#94a3b8;--line:#334155;--up:#22c55e;--up-bg:rgba(34,197,94,.14);--down:#ef4444;--down-bg:rgba(239,68,68,.14);--flat:#94a3b8;--flat-bg:rgba(148,163,184,.14);--accent:#38bdf8;--amber:#f59e0b;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif;}
+  .wrap{max-width:1100px;margin:0 auto;padding:1.5rem 1.25rem 3rem;}
+  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem;}
+  header h1{font-size:1.15rem;margin:0;}
+  a.back{color:var(--accent);text-decoration:none;font-size:.85rem;}
+  .sub{color:var(--muted);font-size:.8rem;margin-bottom:1rem;}
+  .controls{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem;}
+  input,select{background:var(--panel-2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;}
+  input{flex:1;min-width:180px;}
+  table{width:100%;border-collapse:collapse;font-size:.85rem;}
+  th,td{padding:.5rem .55rem;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;}
+  th{color:var(--muted);font-weight:600;font-size:.72rem;text-align:right;cursor:pointer;user-select:none;}
+  th:first-child,td:first-child,th.l,td.l{text-align:left;}
+  tbody tr{cursor:pointer;}
+  tbody tr:hover{background:var(--panel-2);}
+  .pill{padding:.15rem .5rem;border-radius:999px;font-weight:700;font-size:.75rem;}
+  .BUY{background:var(--up-bg);color:var(--up);} .WEAK_BUY{background:var(--up-bg);color:var(--up);opacity:.85;}
+  .SELL{background:var(--down-bg);color:var(--down);} .WEAK_SELL{background:var(--down-bg);color:var(--down);opacity:.85;}
+  .NEUTRAL{background:var(--flat-bg);color:var(--flat);}
+  td.tp{color:var(--up);} td.sl{color:var(--down);}
+  .card{background:var(--panel);border-radius:14px;padding:1rem 1.25rem;margin-bottom:1rem;}
+  #detail{position:sticky;top:0;}
+  .grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:.5rem;margin:.6rem 0;}
+  .cell{background:var(--panel-2);border-radius:10px;padding:.5rem .7rem;}
+  .cell .k{font-size:.68rem;color:var(--muted);display:block;}
+  .cell .v{font-size:1.05rem;font-weight:700;}
+  .cell .v.up{color:var(--up);}.cell .v.down{color:var(--down);}
+  .levels{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin:.6rem 0;}
+  .lvl{border-radius:10px;padding:.6rem .7rem;text-align:center;border:1px solid var(--line);}
+  .lvl .k{font-size:.7rem;color:var(--muted);}
+  .lvl .v{font-size:1.25rem;font-weight:800;}
+  .lvl.entry{border-color:var(--accent);} .lvl.tp{border-color:var(--up);} .lvl.tp .v{color:var(--up);}
+  .lvl.sl{border-color:var(--down);} .lvl.sl .v{color:var(--down);}
+  ul.reasons{margin:.4rem 0 0;padding-left:1.1rem;font-size:.85rem;line-height:1.6;}
+  .muted{color:var(--muted);} .disc{font-size:.72rem;color:var(--muted);line-height:1.6;margin-top:.6rem;}
+  .empty{color:var(--muted);padding:2rem 0;text-align:center;}
+  .side{font-size:.8rem;color:var(--muted);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>🔎 個別銘柄 分析(テクニカル+ファンダ)</h1>
+    <a class="back" href="./index.html">← ダッシュボード</a>
+  </header>
+  <div class="sub" id="sub"></div>
+  <div id="detail"></div>
+  <div class="controls">
+    <input id="q" placeholder="コード/銘柄名/セクターで検索" />
+    <select id="dir">
+      <option value="">全方向</option>
+      <option value="BUY">買い</option><option value="WEAK_BUY">やや買い</option>
+      <option value="NEUTRAL">中立</option>
+      <option value="WEAK_SELL">やや売り</option><option value="SELL">売り</option>
+    </select>
+  </div>
+  <div id="content"><div class="empty">読み込み中...</div></div>
+  <div class="disc" id="disc"></div>
+</div>
+<script>
+const DIRJP = {BUY:"買い",WEAK_BUY:"やや買い",NEUTRAL:"中立",WEAK_SELL:"やや売り",SELL:"売り"};
+let DATA = null, sortKey="direction", sortAsc=true;
+
+function n(v,d=0){return v==null?"—":Number(v).toLocaleString(undefined,{maximumFractionDigits:d});}
+function pct(v,d=1){return v==null?"—":(v*100).toFixed(d)+"%";}
+
+function detailHtml(s){
+  const ind=s.indicators||{}; const f=s.fundamentals;
+  const rr=s.risk_reward!=null?`リスクリワード 1:${s.risk_reward}`:"";
+  const fund = f ? `<div class="grid2">
+      <div class="cell"><span class="k">PER</span><span class="v">${f.per?f.per.toFixed(1)+"倍":"—"}</span></div>
+      <div class="cell"><span class="k">PBR</span><span class="v">${f.pbr?f.pbr.toFixed(2)+"倍":"—"}</span></div>
+      <div class="cell"><span class="k">配当利回り</span><span class="v">${f.dividend_yield!=null?pct(f.dividend_yield,2):"—"}</span></div>
+      <div class="cell"><span class="k">EPS</span><span class="v">${f.eps?n(f.eps,1):"—"}</span></div>
+      <div class="cell"><span class="k">BPS</span><span class="v">${f.bps?n(f.bps,1):"—"}</span></div>
+    </div>` : `<div class="muted" style="font-size:.8rem">ファンダ(財務)データはこのプランでは未取得です。テクニカルのみで判定しています。</div>`;
+  return `<div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem">
+      <div><span style="font-size:1.15rem;font-weight:800">${s.name}</span> <span class="muted">${s.code} ・ ${s.sector||""}</span></div>
+      <span class="pill ${s.direction}">${DIRJP[s.direction]}</span>
+    </div>
+    <div class="side">方向: <b>${s.side}</b> ・ 現値 ${n(s.current_price,1)} ・ ${rr}</div>
+    <div class="levels">
+      <div class="lvl entry"><div class="k">イン(エントリー)</div><div class="v">${n(s.entry,1)}</div></div>
+      <div class="lvl tp"><div class="k">利確(TP)</div><div class="v">${n(s.take_profit,1)}</div><div class="k">${pct(s.tp_pct)}</div></div>
+      <div class="lvl sl"><div class="k">損切り(SL)</div><div class="v">${n(s.stop_loss,1)}</div><div class="k">${pct(s.sl_pct)}</div></div>
+    </div>
+    <div class="grid2">
+      <div class="cell"><span class="k">RSI(14)</span><span class="v">${ind.rsi!=null?ind.rsi.toFixed(0):"—"}</span></div>
+      <div class="cell"><span class="k">25日線乖離</span><span class="v ${ind.dev25>=0?'up':'down'}">${pct(ind.dev25)}</span></div>
+      <div class="cell"><span class="k">ATR(14)</span><span class="v">${n(ind.atr,1)} (${pct(ind.atr_pct)})</span></div>
+      <div class="cell"><span class="k">年初来高値から</span><span class="v">${pct(ind.pct_from_high)}</span></div>
+      <div class="cell"><span class="k">MACDヒスト</span><span class="v ${ind.macd_hist>=0?'up':'down'}">${ind.macd_hist!=null?ind.macd_hist.toFixed(1):"—"}</span></div>
+      <div class="cell"><span class="k">相対出来高</span><span class="v">${ind.rel_volume?ind.rel_volume.toFixed(2)+"x":"—"}</span></div>
+      <div class="cell"><span class="k">直近安値(支持)</span><span class="v">${n(s.support,1)}</span></div>
+      <div class="cell"><span class="k">直近高値(抵抗)</span><span class="v">${n(s.resistance,1)}</span></div>
+    </div>
+    ${fund}
+    <div style="font-size:.8rem;color:var(--muted);margin-top:.5rem">判断根拠:</div>
+    <ul class="reasons">${(s.reasons||[]).map(r=>`<li>${r}</li>`).join("")}</ul>
+    <div class="disc">ATRベースの参考価格です(イン=現値、SL=エントリー−1.5×ATRと直近安値の低い方、TP=エントリー+2.5×ATR)。投資判断の最終責任は利用者本人にあります。</div>
+  </div>`;
+}
+
+function rowsHtml(list){
+  return list.map(s=>`<tr data-code="${s.code}">
+    <td class="l"><b>${s.name}</b> <span class="muted">${s.code}</span></td>
+    <td class="l"><span class="pill ${s.direction}">${DIRJP[s.direction]}</span></td>
+    <td>${n(s.current_price,1)}</td>
+    <td>${n(s.entry,1)}</td>
+    <td class="tp">${n(s.take_profit,1)}</td>
+    <td class="sl">${n(s.stop_loss,1)}</td>
+    <td>${s.risk_reward!=null?"1:"+s.risk_reward:"—"}</td>
+    <td>${s.indicators&&s.indicators.rsi!=null?s.indicators.rsi.toFixed(0):"—"}</td>
+    <td class="l muted">${s.sector||""}</td>
+  </tr>`).join("");
+}
+
+function apply(){
+  const q=document.getElementById("q").value.trim().toLowerCase();
+  const dir=document.getElementById("dir").value;
+  let list=DATA.stocks.filter(s=>{
+    const hit=!q || (s.code+ " "+s.name+" "+(s.sector||"")).toLowerCase().includes(q);
+    const dm=!dir || s.direction===dir;
+    return hit&&dm;
+  });
+  document.getElementById("content").innerHTML=`<div class="card" style="overflow-x:auto"><table>
+    <thead><tr>
+      <th class="l">銘柄</th><th class="l">方向</th><th>現値</th><th>イン</th><th>利確</th><th>損切り</th><th>R:R</th><th>RSI</th><th class="l">セクター</th>
+    </tr></thead><tbody>${rowsHtml(list)}</tbody></table>
+    <div class="muted" style="font-size:.78rem;margin-top:.5rem">${list.length}銘柄 ・ 行をクリックで詳細</div></div>`;
+  document.querySelectorAll("tbody tr").forEach(tr=>tr.addEventListener("click",()=>{
+    const s=DATA.stocks.find(x=>x.code===tr.dataset.code);
+    document.getElementById("detail").innerHTML=detailHtml(s);
+    window.scrollTo({top:0,behavior:"smooth"});
+  }));
+}
+
+function render(data){
+  DATA=data;
+  document.getElementById("sub").textContent=`${data.count}銘柄 ・ 生成 ${data.generated_at} ・ 大型株+ウォッチリスト ・ ATRベース参考価格`;
+  document.getElementById("disc").textContent="※ ルールベースの参考情報であり投資助言ではありません。テクニカル指標とATRから機械的に算出しています。";
+  if(!data.stocks||!data.stocks.length){document.getElementById("content").innerHTML=`<div class="empty">データがありません。</div>`;return;}
+  document.getElementById("detail").innerHTML=detailHtml(data.stocks[0]);
+  document.getElementById("q").addEventListener("input",apply);
+  document.getElementById("dir").addEventListener("change",apply);
+  apply();
+}
+
+if(window.__ANALYSIS__){ render(window.__ANALYSIS__); }
+else {
+  fetch("./analysis.json").then(r=>r.ok?r.json():Promise.reject(r.status)).then(render)
+    .catch(()=>{document.getElementById("content").innerHTML=`<div class="empty">分析データがまだありません(Stock Analysisワークフロー実行後に表示)。</div>`;});
+}
+</script>
+</body>
+</html>
