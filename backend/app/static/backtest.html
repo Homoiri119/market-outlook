@@ -145,7 +145,22 @@ function render(bt){
   </div>
   <div class="muted" style="font-size:.75rem;margin-top:.6rem">「的中率」は<b>寄り付きの方向</b>を当てた割合(このツールが予測している対象)。「戦略」は寄り付きで建て大引けで手仕舞う<b>取引可能な</b>損益で、<b>ギャップ自体は取れない</b>点に注意(寄り付いた時点でギャップは価格に織り込み済み)。</div>
   </section>`;
-  document.getElementById("content").innerHTML =
+  const lf=(s.long_flat||{}), bh=(s.buy_hold||{});
+  const verdict=`<section class="card" style="border-left:4px solid var(--accent)">
+    <h2 style="color:var(--text);font-size:1.05rem">結論(要点)</h2>
+    <div style="font-size:.95rem;line-height:1.8">
+      米国の終値から、翌朝 東京がどちらに<b>寄り付くか(方向)</b>を <b>${pct(bt.hit_rate,1)}</b> 当てられました。
+      ただし<b>寄り付きのギャップ自体は売買できない</b>(気づいた時には価格に反映済み)。
+      実際に取れる<b>「寄りで買って引けで売る」</b>戦略の累積リターンは <b>${pct(lf.total_return)}</b>
+      (同期間 何もせず持ち続けた場合=バイ&ホールドは ${pct(bh.total_return)})。
+      → <b>「当てやすさ(寄り付き)」と「儲けやすさ(日中)」は別物</b>、が最大の学びです。
+    </div>
+    <div class="muted" style="font-size:.75rem;margin-top:.6rem">
+      <b>的中率</b>=寄り付きの上げ下げを当てた割合。<b>寄→引</b>=寄りで建て引けで手仕舞う取引可能な範囲。
+      <b>ウォークフォワード</b>=各時点で過去データだけを使って予測(未来を見ていない)。手数料・滑りは未考慮。
+    </div>
+  </section>`;
+  document.getElementById("content").innerHTML = verdict +
     summary + renderStrategyTable(s) + renderEquity(bt.equity) + renderByYear(bt.by_year) +
     `<section class="card"><div class="disc">
       ※ 本バックテストは日経225指数レベルの検証です。米国終値の特徴量(S&P500リターン・VIX変化・USD/JPYリターン)から

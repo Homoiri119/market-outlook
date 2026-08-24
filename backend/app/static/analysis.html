@@ -84,8 +84,9 @@ function pct(v,d=1){return v==null?"—":(v*100).toFixed(d)+"%";}
 
 const CLR={up:"#22c55e",down:"#ef4444",accent:"#38bdf8",amber:"#f59e0b",muted:"#94a3b8",line:"#334155"};
 
-function chartSvg(s){
-  const c=s.chart; if(!c||!c.c||c.c.length<5) return "";
+function chartSvg(s, tf){
+  tf = tf || "daily";
+  const c=(s.charts&&s.charts[tf]); if(!c||!c.c||c.c.length<5) return "<div class='muted' style='font-size:.8rem'>チャートデータ不足</div>";
   const W=920,H=280,padL=54,padR=64,padT=10,padB=22, n=c.c.length;
   const lv=[s.entry,s.take_profit,s.stop_loss,s.pullback_entry].filter(v=>v!=null);
   let lo=Math.min(...c.l.filter(v=>v!=null),...lv), hi=Math.max(...c.h.filter(v=>v!=null),...lv);
@@ -129,7 +130,21 @@ function timingBadge(s){
   return `<span style="border:1px solid ${col};color:${col};border-radius:999px;padding:.1rem .5rem;font-size:.72rem;font-weight:700">${lbl}</span>`;
 }
 
+let curStock=null, curTf="daily";
+function setTf(tf){
+  curTf=tf;
+  const box=document.getElementById("chartbox");
+  if(box&&curStock) box.innerHTML=chartSvg(curStock,curTf);
+  document.querySelectorAll(".tfbtn").forEach(b=>b.style.background=(b.dataset.tf===tf)?"var(--accent)":"transparent");
+  document.querySelectorAll(".tfbtn").forEach(b=>b.style.color=(b.dataset.tf===tf)?"#04222e":"var(--text)");
+}
+function tfToggle(){
+  const b=(tf,label)=>`<button class="tfbtn" data-tf="${tf}" onclick="setTf('${tf}')" style="border:1px solid var(--line);border-radius:6px;padding:.25rem .7rem;font-size:.78rem;font-weight:700;cursor:pointer;background:transparent;color:var(--text)">${label}</button>`;
+  return `<div style="display:flex;gap:.4rem;margin:.3rem 0">${b("daily","日足")}${b("weekly","週足")}${b("monthly","月足")}</div>`;
+}
+
 function detailHtml(s){
+  curStock=s;
   const ind=s.indicators||{}; const f=s.fundamentals;
   const rr=s.risk_reward!=null?`リスクリワード 1:${s.risk_reward}`:"";
   const pb = s.pullback_entry!=null ? `<div class="levels" style="margin-top:.3rem">
@@ -156,7 +171,8 @@ function detailHtml(s){
     </div>
     <div class="side">方向: <b>${s.side}</b> ・ 現値 ${n(s.current_price,1)} ・ ${rr} ・ ${timingBadge(s)}</div>
     <div style="font-size:.78rem;color:var(--muted);margin:.2rem 0">${s.entry_note||""}</div>
-    ${chartSvg(s)}
+    ${tfToggle()}
+    <div id="chartbox">${chartSvg(s,curTf)}</div>
     <div class="levels">
       <div class="lvl entry"><div class="k">イン(成行)</div><div class="v">${n(s.entry,1)}</div></div>
       <div class="lvl tp"><div class="k">利確(TP)</div><div class="v">${n(s.take_profit,1)}</div><div class="k">${pct(s.tp_pct)}</div></div>
@@ -211,6 +227,7 @@ function apply(){
   document.querySelectorAll("tbody tr").forEach(tr=>tr.addEventListener("click",()=>{
     const s=DATA.stocks.find(x=>x.code===tr.dataset.code);
     document.getElementById("detail").innerHTML=detailHtml(s);
+    setTf(curTf);
     window.scrollTo({top:0,behavior:"smooth"});
   }));
 }
@@ -221,6 +238,7 @@ function render(data){
   document.getElementById("disc").textContent="※ ルールベースの参考情報であり投資助言ではありません。テクニカル指標とATRから機械的に算出しています。";
   if(!data.stocks||!data.stocks.length){document.getElementById("content").innerHTML=`<div class="empty">データがありません。</div>`;return;}
   document.getElementById("detail").innerHTML=detailHtml(data.stocks[0]);
+  setTf("daily");
   document.getElementById("q").addEventListener("input",apply);
   document.getElementById("dir").addEventListener("change",apply);
   apply();

@@ -16,32 +16,37 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-GOOD = [
-    "最高益", "過去最高", "増益", "増収", "上方修正", "上振れ", "増配", "復配", "自社株買い",
-    "受注", "提携", "業務提携", "資本提携", "買収", "黒字化", "黒字転換", "上場来高値", "最高値",
-    "格上げ", "上げ", "好調", "回復", "新製品", "大型受注", "採用", "特需",
-]
-BAD = [
-    "減益", "減収", "下方修正", "下振れ", "減配", "無配", "赤字", "赤字転落", "最終赤字",
-    "不正", "不祥事", "リコール", "延期", "訴訟", "提訴", "課徴金", "行政処分", "業務停止",
-    "格下げ", "急落", "安値", "下落", "特別損失", "減損", "希薄化", "公募増資", "内部告発",
-    "業績悪化", "リストラ", "人員削減",
+# Event taxonomy: (category, polarity, materiality weight, keywords). Higher weight =
+# more market-moving. Order matters (first match wins), so put high-impact first.
+EVENTS = [
+    ("業績上方修正", +1, 3, ["上方修正", "上振れ", "業績予想の修正（増"]),
+    ("業績下方修正", -1, 3, ["下方修正", "下振れ", "業績予想の修正（減"]),
+    ("不祥事・法務", -1, 3, ["不正", "不祥事", "リコール", "訴訟", "提訴", "課徴金", "行政処分",
+                        "業務停止", "粉飾", "改ざん", "偽装", "インサイダー", "捜索"]),
+    ("最高益・増益", +1, 2, ["最高益", "過去最高", "増益", "増収", "黒字転換", "黒字化", "最終黒字"]),
+    ("減益・赤字", -1, 2, ["減益", "減収", "赤字", "最終赤字", "赤字転落", "業績悪化", "特別損失", "減損"]),
+    ("株主還元", +1, 2, ["増配", "自社株買い", "復配", "記念配当"]),
+    ("減配・無配", -1, 2, ["減配", "無配"]),
+    ("受注・提携・M&A", +1, 2, ["大型受注", "受注", "提携", "業務提携", "資本提携", "買収", "出資", "TOB"]),
+    ("増資・希薄化", -1, 2, ["公募増資", "希薄化", "新株発行", "第三者割当", "転換社債"]),
+    ("格上げ・目標↑", +1, 1, ["格上げ", "目標株価引き上げ", "レーティング引き上げ", "投資判断引き上げ"]),
+    ("格下げ・目標↓", -1, 1, ["格下げ", "目標株価引き下げ", "レーティング引き下げ", "投資判断引き下げ"]),
+    ("新製品・好材料", +1, 1, ["新製品", "新工場", "開発成功", "承認取得", "特需", "上場来高値"]),
+    ("下落・安値", -1, 1, ["急落", "安値", "ストップ安", "急落"]),
 ]
 
 RSS_URL = "https://news.google.com/rss/search?q={q}&hl=ja&gl=JP&ceid=JP:ja"
 _UA = "Mozilla/5.0 (compatible; market-outlook/1.0)"
 
 
-def tag_headline(title: str) -> tuple[str, list[str]]:
-    g = [k for k in GOOD if k in title]
-    b = [k for k in BAD if k in title]
-    if g and not b:
-        return "good", g
-    if b and not g:
-        return "bad", b
-    if g and b:
-        return "mixed", g + b
-    return "neutral", []
+def classify(title: str) -> dict:
+    """Classify a headline into an event category with polarity & materiality weight."""
+    for cat, pol, w, kws in EVENTS:
+        hit = [k for k in kws if k in title]
+        if hit:
+            return {"category": cat, "polarity": pol, "weight": w, "keywords": hit,
+                    "tag": "good" if pol > 0 else "bad"}
+    return {"category": "その他", "polarity": 0, "weight": 0, "keywords": [], "tag": "neutral"}
 
 
 def fetch_news(query: str, limit: int = 6, days: int = 10) -> list[dict]:
@@ -78,11 +83,12 @@ def fetch_news(query: str, limit: int = 6, days: int = 10) -> list[dict]:
             continue
         if not title or not link.startswith("http"):
             continue
-        tag, kws = tag_headline(title)
+        ev = classify(title)
         items.append({
             "title": title, "link": link, "source": source,
             "published": when.astimezone(dt.timezone(dt.timedelta(hours=9))).strftime("%m/%d %H:%M") if when else "",
-            "tag": tag, "keywords": kws,
+            "tag": ev["tag"], "category": ev["category"], "weight": ev["weight"],
+            "polarity": ev["polarity"], "keywords": ev["keywords"],
         })
         if len(items) >= limit:
             break
@@ -92,11 +98,17 @@ def fetch_news(query: str, limit: int = 6, days: int = 10) -> list[dict]:
 def summarize(headlines: list[dict]) -> dict:
     good = sum(1 for h in headlines if h["tag"] == "good")
     bad = sum(1 for h in headlines if h["tag"] == "bad")
-    score = good - bad
-    if score > 0:
+    # Materiality-weighted score: sum of polarity * weight (bigger events count more).
+    weighted = sum(h.get("polarity", 0) * h.get("weight", 0) for h in headlines)
+    cats = []
+    for h in headlines:
+        if h.get("category") and h["category"] != "その他" and h["category"] not in cats:
+            cats.append(h["category"])
+    if weighted > 0:
         sentiment = "good"
-    elif score < 0:
+    elif weighted < 0:
         sentiment = "bad"
     else:
         sentiment = "neutral"
-    return {"good": good, "bad": bad, "count": len(headlines), "score": score, "sentiment": sentiment}
+    return {"good": good, "bad": bad, "count": len(headlines), "score": weighted,
+            "sentiment": sentiment, "categories": cats}

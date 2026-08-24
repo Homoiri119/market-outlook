@@ -255,27 +255,39 @@ def extract_fundamentals(statements: list[dict], price: float, mkt_cap: float | 
     return out
 
 
-def _build_chart(bars: pd.DataFrame) -> dict:
-    df = bars.sort_index()
-    close = df["close"]
+def _r(x):
+    if x is None or pd.isna(x):
+        return None
+    return round(float(x), 1) if float(x) < 1000 else round(float(x))
+
+
+def _tf_chart(df: pd.DataFrame, rule: str | None, n: int) -> dict:
+    """Build one timeframe's chart. rule=None -> daily; else pandas resample rule."""
+    d = df.copy()
+    d.index = pd.to_datetime(d.index)
+    if rule:
+        d = d.resample(rule).agg({"open": "first", "high": "max", "low": "min", "close": "last"}).dropna()
+    close = d["close"]
     sma25 = close.rolling(25).mean()
     sma75 = close.rolling(75).mean()
-    tail = df.tail(CHART_DAYS)
-    idx = tail.index
-
-    def r(x):
-        if x is None or pd.isna(x):
-            return None
-        return round(float(x), 1) if float(x) < 1000 else round(float(x))
-
+    tail = d.tail(n)
     return {
-        "dates": [d.isoformat() for d in idx],
-        "o": [r(v) for v in tail["open"]],
-        "h": [r(v) for v in tail["high"]],
-        "l": [r(v) for v in tail["low"]],
-        "c": [r(v) for v in tail["close"]],
-        "sma25": [r(v) for v in sma25.tail(CHART_DAYS)],
-        "sma75": [r(v) for v in sma75.tail(CHART_DAYS)],
+        "dates": [i.date().isoformat() for i in tail.index],
+        "o": [_r(v) for v in tail["open"]],
+        "h": [_r(v) for v in tail["high"]],
+        "l": [_r(v) for v in tail["low"]],
+        "c": [_r(v) for v in tail["close"]],
+        "sma25": [_r(v) for v in sma25.tail(n)],
+        "sma75": [_r(v) for v in sma75.tail(n)],
+    }
+
+
+def _build_charts(bars: pd.DataFrame) -> dict:
+    df = bars.sort_index()
+    return {
+        "daily": _tf_chart(df, None, 65),
+        "weekly": _tf_chart(df, "W-FRI", 60),
+        "monthly": _tf_chart(df, "ME", 48),
     }
 
 
@@ -315,5 +327,5 @@ def analyze_stock(code: str, name: str, sector: str, bars: pd.DataFrame,
         "indicators": ind,
         "reasons": reasons,
         "fundamentals": fundamentals,
-        "chart": _build_chart(bars),
+        "charts": _build_charts(bars),
     }

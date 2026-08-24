@@ -44,7 +44,7 @@ def _load_watchlist() -> list[str]:
 
 def main() -> int:
     end = dt.date.today()
-    start = end - dt.timedelta(days=560)  # ~1.5y for 75-day MA + 52w range
+    start = end - dt.timedelta(days=1900)  # ~5y so weekly/monthly charts have enough bars
 
     master = jquants_client.fetch_listed_info()
     if master.empty or "Code" not in master.columns:

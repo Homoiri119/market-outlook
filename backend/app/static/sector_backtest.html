@@ -66,7 +66,17 @@ function render(bt){
       <span class="strat ${sc}">${pct(s.strategy_return,0)}</span>
     </div>`;
   }).join("");
-  document.getElementById("content").innerHTML =
+  const top=secs[0], bottom=secs[secs.length-1];
+  const guide=`<section class="card" style="border-left:4px solid var(--accent)">
+    <h2 style="color:var(--text);font-size:1.05rem">読み方</h2>
+    <div style="font-size:.95rem;line-height:1.8">
+      各セクターについて「米国の終値から、翌朝そのセクターが<b>どちらに寄り付くか</b>を当てられた割合(的中率)」を出しています。
+      <b>的中率が高いほど、米国株の動きに素直に連動しやすいセクター</b>です(例: ${top?top.name+" "+Math.round(top.hit_rate*100)+"%":""})。
+      右端の「戦略(寄→引)」は<b>寄りで建て引けで手仕舞った場合の損益</b>で、<b>プラスなら日中も同じ方向に伸びやすい</b>、
+      マイナスなら<b>寄り付き後は逆戻りしやすい(ギャップ取りは難しい)</b>ことを示します。
+    </div>
+  </section>`;
+  document.getElementById("content").innerHTML = guide +
     `<section class="card">
        <h2 style="font-size:.95rem;color:var(--muted);margin:0 0 .5rem">寄り付き方向 的中率(セクター別・高い順)</h2>
        <div class="hdr"><span class="nm">セクター</span><span class="mid"></span><span class="val">的中率</span><span class="strat">戦略(寄→引)</span></div>

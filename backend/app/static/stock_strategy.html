@@ -102,10 +102,33 @@ function equity(configs){
     </svg></section>`;
 }
 
+function verdict(cfgs){
+  const arr=Object.entries(cfgs).filter(([k,s])=>s&&s.trades);
+  if(!arr.length) return "";
+  const [bk,bs]=arr.sort((a,b)=>b[1].expectancy_R-a[1].expectancy_R)[0];
+  const edge=bs.expectancy_R>0 && bs.profit_factor>=1;
+  const yen=Math.round(bs.expectancy_R*10000);
+  const col=edge?"var(--up)":"var(--down)";
+  return `<section class="card" style="border-left:4px solid ${col}">
+    <h2 style="color:var(--text);font-size:1.05rem">結論(要点)</h2>
+    <div style="font-size:.95rem;line-height:1.8">
+      この順張りルールは検証期間で <b style="color:${col}">${edge?"優位性あり":"優位性は確認できず"}</b>。
+      最良の設定は <b>${LABEL[bk]}</b> で、1回の売買あたり平均 <b>${bs.expectancy_R.toFixed(3)}R</b>
+      ── <b>1Rを1万円のリスク</b>に置くと平均 <b style="color:${col}">${yen>=0?"+":""}${yen.toLocaleString()}円/回</b>の期待値です。
+      勝率 ${(bs.win_rate*100).toFixed(0)}% ・ プロフィットファクター ${bs.profit_factor?bs.profit_factor.toFixed(2):"—"}。
+      <b>勝率が5割未満でも「勝ち幅 > 負け幅」で純プラス</b>になるのが順張りの勝ちパターンです。
+    </div>
+    <div class="muted" style="font-size:.75rem;margin-top:.6rem">
+      <b>R(アール)</b>=1回の損益 ÷ 最初に決めた損切り幅。+1Rは「リスクと同額の利益」。
+      <b>期待値R</b>=1回あたりの平均R(プラスなら優位)。<b>PF</b>=総利益÷総損失(1超で黒字)。手数料・滑りは未考慮。
+    </div>
+  </section>`;
+}
+
 function render(bt){
   document.getElementById("sub").textContent=
     `大型株 ${bt.universe_size}銘柄 ・ ${bt.start}〜${bt.end} ・ 生成 ${bt.generated_at} ・ ロングのみ ・ 入口=25MA>75MA & MACD>0 の新規シグナル`;
-  document.getElementById("content").innerHTML = table(bt.configs) + equity(bt.configs) +
+  document.getElementById("content").innerHTML = verdict(bt.configs) + table(bt.configs) + equity(bt.configs) +
     `<section class="card"><div class="disc">
       入口: close>25日線>75日線 かつ MACDヒスト>0 の新規点で建て。基本=初期SL(−1.5×ATR)/TP(+2.5×ATR)。
       レジーム=TOPIXが200日線の上の時のみ建て。トレーリング=シャンデリア(高値−2.5×ATR)で追随しTP無し。

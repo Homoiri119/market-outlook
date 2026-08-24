@@ -60,15 +60,18 @@ const SENT={good:"好材料優勢",bad:"悪材料優勢",neutral:"中立"};
 function card(s){
   const hl=(s.headlines||[]).map(h=>{
     const safeLink = /^https?:\/\//.test(h.link)?h.link:"#";
-    const tag = h.tag==="good"?`<span class="tag good">好</span>`:h.tag==="bad"?`<span class="tag bad">悪</span>`:h.tag==="mixed"?`<span class="tag mixed">混</span>`:"";
-    return `<li>${tag}<a href="${esc(safeLink)}" target="_blank" rel="noopener noreferrer">${esc(h.title)}</a>
-      <div class="meta">${esc(h.source)} ・ ${esc(h.published)}${h.keywords&&h.keywords.length?" ・ "+esc(h.keywords.join("/")):""}</div></li>`;
+    const cat = (h.category&&h.category!=="その他")
+      ? `<span class="tag ${h.tag}">${esc(h.category)}${h.weight?"★".repeat(h.weight):""}</span>` : "";
+    return `<li>${cat}<a href="${esc(safeLink)}" target="_blank" rel="noopener noreferrer">${esc(h.title)}</a>
+      <div class="meta">${esc(h.source)} ・ ${esc(h.published)}</div></li>`;
   }).join("") || `<li class="muted">直近の該当ニュースなし</li>`;
+  const chips=(s.categories||[]).map(c=>`<span class="tag mixed">${esc(c)}</span>`).join(" ");
   return `<div class="card">
     <div class="st-head">
       <div><b>${esc(s.name)}</b> <span class="muted">${esc(s.code)} ・ ${esc(s.sector)}</span></div>
-      <span class="pill ${s.sentiment}">${SENT[s.sentiment]||""} (好${s.good}/悪${s.bad})</span>
+      <span class="pill ${s.sentiment}">${SENT[s.sentiment]||""} ・ 重要度スコア ${s.score>0?"+":""}${s.score}</span>
     </div>
+    ${chips?`<div style="margin-bottom:.4rem">${chips}</div>`:""}
     <ul class="hl">${hl}</ul>
   </div>`;
 }
