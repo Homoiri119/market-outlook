@@ -72,3 +72,8 @@ def analysis_page() -> FileResponse:
 @app.get("/sector_backtest.html", include_in_schema=False)
 def sector_backtest_page() -> FileResponse:
     return FileResponse(STATIC_DIR / "sector_backtest.html")
+
+
+@app.get("/stock_strategy.html", include_in_schema=False)
+def stock_strategy_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "stock_strategy.html")

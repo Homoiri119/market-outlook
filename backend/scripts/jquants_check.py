@@ -153,6 +153,11 @@ def main() -> int:
         # Fundamentals — needed for PER/PBR/ROE/dividend analysis:
         ("/fins/statements", {"code": "7203"}),
         ("/fins/dividend", {"code": "7203"}),
+        # External-info features (calendar/alerts + supply-demand):
+        ("/fins/announcement", {}),                       # earnings announcement calendar
+        ("/markets/weekly-margin-interest", {"code": "7203"}),  # 信用残
+        ("/markets/short-selling", {"from": d1, "to": d2}),     # 空売り
+        ("/markets/trades-spec", {"from": d1, "to": d2}),       # 投資部門別売買
     ]
 
     working_host = None

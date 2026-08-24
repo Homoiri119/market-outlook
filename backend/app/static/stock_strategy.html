@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>戦略検証 | 寄り付き前アウトルック</title>
+<style>
+  :root{--bg:#0f172a;--panel:#1e293b;--panel-2:#273449;--text:#e2e8f0;--muted:#94a3b8;--line:#334155;--up:#22c55e;--down:#ef4444;--accent:#38bdf8;--amber:#f59e0b;}
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif;}
+  .wrap{max-width:1000px;margin:0 auto;padding:1.5rem 1.25rem 3rem;}
+  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem;}
+  header h1{font-size:1.15rem;margin:0;}
+  .sub{color:var(--muted);font-size:.82rem;margin-bottom:1rem;}
+  section.card{background:var(--panel);border-radius:16px;padding:1.25rem 1.5rem;margin-top:1rem;}
+  section.card h2{font-size:.95rem;margin:0 0 .75rem;color:var(--muted);font-weight:600;}
+  table{width:100%;border-collapse:collapse;}
+  th,td{text-align:right;padding:.5rem .6rem;border-bottom:1px solid var(--line);font-size:.9rem;}
+  th:first-child,td:first-child{text-align:left;}
+  td.pos{color:var(--up);}td.neg{color:var(--down);}
+  svg{width:100%;display:block;}
+  .glabel{fill:var(--muted);font-size:10px;}
+  .legend{display:flex;gap:.9rem;font-size:.78rem;color:var(--muted);flex-wrap:wrap;}
+  .legend .lg{display:flex;align-items:center;gap:.3rem;}
+  .legend .sw{width:16px;height:3px;border-radius:2px;display:inline-block;}
+  .muted{color:var(--muted);}
+  .disc{font-size:.75rem;color:var(--muted);line-height:1.6;}
+  .empty{color:var(--muted);padding:2rem 0;text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav class="topnav" style="display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:1rem;font-size:.85rem">
+    <a href="./index.html" style="color:#e2e8f0;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:.4rem .7rem">🗾 アウトルック</a>
+    <a href="./analysis.html" style="color:#e2e8f0;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:.4rem .7rem">🔎 個別銘柄</a>
+    <a href="./stock_strategy.html" style="color:#e2e8f0;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:.4rem .7rem">🧪 戦略検証</a>
+    <a href="./backtest.html" style="color:#e2e8f0;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:.4rem .7rem">📊 バックテスト</a>
+    <a href="./sector_backtest.html" style="color:#e2e8f0;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:.4rem .7rem">🏭 セクター</a>
+  </nav>
+
+  <header><h1>🧪 個別株 戦略検証(トレード・シミュレーション)</h1></header>
+  <div class="sub" id="sub"></div>
+  <div id="content"><div class="empty">読み込み中...</div></div>
+</div>
+<script>
+const LABEL={base:"基本(固定TP/SL)",regime:"+レジームフィルタ",trail:"+レジーム+トレーリング"};
+function pct(v,d=1){return v==null?"—":(v*100).toFixed(d)+"%";}
+function num(v,d=2){return v==null?"—":Number(v).toFixed(d);}
+
+function table(configs){
+  const keys=["base","regime","trail"];
+  const rows=keys.map(k=>{
+    const s=configs[k]||{};
+    if(!s.trades) return `<tr><td>${LABEL[k]}</td><td colspan="7" class="muted">トレードなし</td></tr>`;
+    return `<tr>
+      <td>${LABEL[k]}</td>
+      <td>${s.trades}</td>
+      <td class="${s.win_rate>=0.5?'pos':''}">${pct(s.win_rate)}</td>
+      <td class="${s.expectancy_R>0?'pos':'neg'}">${num(s.expectancy_R,3)}R</td>
+      <td class="${s.profit_factor>=1?'pos':'neg'}">${s.profit_factor?num(s.profit_factor,2):"—"}</td>
+      <td class="pos">${num(s.avg_win_R,2)}R</td>
+      <td class="neg">${num(s.avg_loss_R,2)}R</td>
+      <td class="neg">${num(s.max_dd_R,1)}R</td>
+    </tr>`;
+  }).join("");
+  return `<section class="card"><h2>設定別パフォーマンス(R倍数ベース・ロングのみ)</h2>
+    <div style="overflow-x:auto"><table>
+    <thead><tr><th>設定</th><th>取引数</th><th>勝率</th><th>期待値</th><th>PF</th><th>平均利益</th><th>平均損失</th><th>最大DD</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>
+    <div class="muted" style="font-size:.75rem;margin-top:.5rem">R = 損益 ÷ 初期リスク(建値−初期損切り)。期待値>0 かつ PF>1 なら優位性あり。1トレード1Rリスク固定を想定。</div>
+  </section>`;
+}
+
+function equity(configs){
+  const keys=["base","regime","trail"];
+  const cols={base:"#94a3b8",regime:"var(--accent)",trail:"var(--amber)"};
+  const series=keys.map(k=>({k,pts:(configs[k]&&configs[k].equity)||[]})).filter(s=>s.pts.length>1);
+  if(!series.length) return "";
+  const W=960,H=300,padL=44,padR=90,padT=14,padB=24;
+  let allR=[]; series.forEach(s=>s.pts.forEach(p=>allR.push(p.cumR))); allR.push(0);
+  let min=Math.min(...allR),max=Math.max(...allR); const pad=(max-min)*0.08||1;min-=pad;max+=pad;
+  // x by index position within each series (trades), normalized to max length
+  const maxLen=Math.max(...series.map(s=>s.pts.length));
+  const x=i=>padL+(i*(W-padL-padR))/(maxLen-1);
+  const y=v=>padT+(H-padT-padB)*(1-(v-min)/(max-min));
+  const lines=series.map(s=>{
+    const pts=s.pts.map((p,i)=>`${x(i)},${y(p.cumR)}`).join(" ");
+    const c=cols[s.k];
+    return `<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="2"/><text x="${x(s.pts.length-1)+3}" y="${y(s.pts[s.pts.length-1].cumR)+3}" fill="${c}" font-size="10">${s.pts[s.pts.length-1].cumR.toFixed(1)}R</text>`;
+  }).join("");
+  const zeroY=y(0);
+  const legend=series.map(s=>`<span class="lg"><span class="sw" style="background:${cols[s.k]}"></span>${LABEL[s.k]}</span>`).join("");
+  return `<section class="card">
+    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem"><h2 style="margin:0">累積損益(R・取引順)</h2><div class="legend">${legend}</div></div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+      <line x1="${padL}" y1="${zeroY}" x2="${W-padR}" y2="${zeroY}" stroke="var(--muted)" stroke-dasharray="4 4" opacity=".5"/>
+      ${lines}
+      <text class="glabel" x="4" y="${y(max)+4}">${max.toFixed(0)}R</text>
+      <text class="glabel" x="4" y="${y(min)+4}">${min.toFixed(0)}R</text>
+      <text class="glabel" x="4" y="${zeroY+4}">0</text>
+    </svg></section>`;
+}
+
+function render(bt){
+  document.getElementById("sub").textContent=
+    `大型株 ${bt.universe_size}銘柄 ・ ${bt.start}〜${bt.end} ・ 生成 ${bt.generated_at} ・ ロングのみ ・ 入口=25MA>75MA & MACD>0 の新規シグナル`;
+  document.getElementById("content").innerHTML = table(bt.configs) + equity(bt.configs) +
+    `<section class="card"><div class="disc">
+      入口: close>25日線>75日線 かつ MACDヒスト>0 の新規点で建て。基本=初期SL(−1.5×ATR)/TP(+2.5×ATR)。
+      レジーム=TOPIXが200日線の上の時のみ建て。トレーリング=シャンデリア(高値−2.5×ATR)で追随しTP無し。
+      指標は因果的(先読みなし)。手数料・スリッページ・約定滑りは未考慮。R倍数はサイズ非依存の実力指標です。
+      過去の成績は将来を保証しません。投資助言ではありません。
+    </div></section>`;
+}
+if(window.__SS__){ render(window.__SS__); }
+else { fetch("./stock_strategy.json").then(r=>r.ok?r.json():Promise.reject()).then(render)
+  .catch(()=>{document.getElementById("content").innerHTML=`<div class="empty">結果がまだありません(Stock Strategy Backtestワークフロー実行後に表示)。</div>`;});}
+</script>
+</body>
+</html>
