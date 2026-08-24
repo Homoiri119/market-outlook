@@ -52,7 +52,6 @@ def main() -> int:
 
     # Universe: large caps by ScaleCat + watchlist codes.
     large = master[master["ScaleCat"].isin(SCALE_CATS)] if "ScaleCat" in master.columns else master.head(0)
-    codes = list(dict.fromkeys(list(large["Code"].astype(str)) + _load_watchlist()))
     # Index master rows (as plain dicts) by both the full code and its 4-digit form,
     # so 4-digit watchlist codes match 5-digit master codes.
     info_by_code: dict[str, dict] = {}
@@ -61,9 +60,17 @@ def main() -> int:
         c = str(d.get("Code"))
         info_by_code.setdefault(c, d)
         info_by_code.setdefault(c[:4], d)
+
+    def canon(c: str) -> str:
+        d = info_by_code.get(c) or info_by_code.get(c[:4])
+        return str(d.get("Code")) if d else c
+
+    # Canonicalize to the master code so 7203 (watchlist) and 72030 (master) don't duplicate.
+    codes = list(dict.fromkeys(canon(c) for c in list(large["Code"].astype(str)) + _load_watchlist()))
     logger.info("Universe size: %d (large caps %d + watchlist)", len(codes), len(large))
 
     results = []
+    fund_on, empty_streak = True, 0
     for i, code in enumerate(codes):
         info = info_by_code.get(code) or info_by_code.get(code[:4]) or {}
         name = str(info.get("CoName", code))
@@ -75,7 +82,16 @@ def main() -> int:
             continue
         if bars.empty:
             continue
-        statements = jquants_client.fetch_statements(code)
+        statements = []
+        if fund_on:
+            statements = jquants_client.fetch_statements(code)
+            if statements:
+                empty_streak = 0
+            else:
+                empty_streak += 1
+                if empty_streak >= 5:  # plan clearly lacks statements — stop trying
+                    fund_on = False
+                    logger.info("Disabling fundamentals (fins/statements not in plan)")
         res = analyze_stock(code, name, sector, bars, statements)
         if res:
             results.append(res)
