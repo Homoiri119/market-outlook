@@ -44,7 +44,10 @@ def _load_watchlist() -> list[str]:
 
 def main() -> int:
     end = dt.date.today()
-    start = end - dt.timedelta(days=1900)  # ~5y so weekly/monthly charts have enough bars
+    # Fetch range for daily bars. ~3.8y is known to work on this plan; 5y was rejected
+    # (plan data horizon). Fall back to shorter ranges if a request returns empty.
+    FETCH_DAYS = [1400, 1000, 600]
+    start = end - dt.timedelta(days=FETCH_DAYS[0])
 
     master = jquants_client.fetch_listed_info()
     if master.empty or "Code" not in master.columns:
@@ -75,12 +78,17 @@ def main() -> int:
         info = info_by_code.get(code) or info_by_code.get(code[:4]) or {}
         name = str(info.get("CoName", code))
         sector = str(info.get("S17Nm", ""))
-        try:
-            bars = jquants_client.fetch_daily_quotes(code, start, end)
-        except Exception:
-            logger.exception("bars failed for %s", code)
-            continue
-        if bars.empty:
+        bars = None
+        for days in FETCH_DAYS:  # adapt to the plan's data horizon
+            try:
+                b = jquants_client.fetch_daily_quotes(code, end - dt.timedelta(days=days), end)
+            except Exception:
+                b = None
+            if b is not None and not b.empty:
+                bars = b
+                break
+        if bars is None or bars.empty:
+            logger.warning("no bars for %s (all ranges failed)", code)
             continue
         statements = []
         if fund_on:
@@ -92,7 +100,11 @@ def main() -> int:
                 if empty_streak >= 5:  # plan clearly lacks statements — stop trying
                     fund_on = False
                     logger.info("Disabling fundamentals (fins/statements not in plan)")
-        res = analyze_stock(code, name, sector, bars, statements)
+        try:
+            res = analyze_stock(code, name, sector, bars, statements)
+        except Exception:
+            logger.exception("analyze failed for %s", code)
+            res = None
         if res:
             results.append(res)
         if (i + 1) % 20 == 0:
