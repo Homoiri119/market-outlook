@@ -78,6 +78,41 @@ def format_brief(o: dict, accuracy: dict | None = None) -> str:
     return "\n".join(lines)
 
 
+def _yen(v) -> str:
+    return "—" if v is None else f"{v:,}"
+
+
+def playbook_section(limit: int = 5) -> str:
+    """Read the pre-generated per-stock analysis (docs/analysis.json) and list the
+    top BUY candidates with entry / stop-loss / take-profit / trailing levels."""
+    f = DOCS_DIR / "analysis.json"
+    if not f.exists():
+        return ""
+    try:
+        stocks = json.loads(f.read_text(encoding="utf-8")).get("stocks", [])
+    except (ValueError, OSError):
+        return ""
+    buys = [s for s in stocks if s.get("direction") == "BUY"]
+    # Prefer "成行可"(timing ok, not overbought), then strongest score.
+    buys.sort(key=lambda s: (0 if s.get("timing") == "ok" else 1, -s.get("score", 0)))
+    buys = buys[:limit]
+
+    lines = ["", "📋 **今日のプレイブック(買い候補)**", "※リスクは資金の1%に固定・トレーリングで利を伸ばす"]
+    if not buys:
+        lines.append("本日の強い買い候補なし(様子見)。")
+        return "\n".join(lines)
+    for s in buys:
+        rr = f"  R:R 1:{s['risk_reward']}" if s.get("risk_reward") else ""
+        line = (f"・{s['name']}({s['code']}) 買い {_yen(s.get('current_price'))} / "
+                f"損切 {_yen(s.get('stop_loss'))} / 利確 {_yen(s.get('take_profit'))}")
+        if s.get("trail_stop") is not None:
+            line += f" / トレール {_yen(s['trail_stop'])}"
+        line += rr
+        lines.append(line)
+    lines.append("→ 上のアウトルックの地合い・セクター追い風を確認し、悪材料の無い銘柄から。参考情報です。")
+    return "\n".join(lines)
+
+
 def load_history() -> list[dict]:
     if HISTORY_FILE.exists():
         try:
@@ -137,7 +172,8 @@ def main() -> int:
         logger.info("Accuracy (last %d): hit-rate %.0f%%, MAE %.2f%%",
                     accuracy["n"], accuracy["hit_rate"] * 100, accuracy["mae"] * 100)
 
-    sent = send_discord_message(format_brief(outlook, accuracy))
+    message = format_brief(outlook, accuracy) + playbook_section()
+    sent = send_discord_message(message)
     logger.info("Discord notification sent: %s", sent)
 
     render_site(outlook, history)
