@@ -160,7 +160,24 @@ function render(bt){
       <b>ウォークフォワード</b>=各時点で過去データだけを使って予測(未来を見ていない)。手数料・滑りは未考慮。
     </div>
   </section>`;
-  document.getElementById("content").innerHTML = verdict +
+  const action=`<section class="card" style="border-left:4px solid var(--amber)">
+    <h2 style="color:var(--text);font-size:1.05rem">▶ この結果を「実際の行動」に落とすと</h2>
+    <div style="font-size:.9rem;line-height:1.7;margin-bottom:.4rem">
+      これは寄り付きの<b>方向</b>の予測で、ギャップ自体は売買できません。だから単独の売買サインではなく、
+      <b>その日の「地合いフィルタ」</b>として使うのが正解です。
+    </div>
+    <ol style="font-size:.95rem;line-height:1.9;padding-left:1.2rem;margin:.3rem 0">
+      <li><b>毎朝「🗾アウトルック」を見る</b>(同じ内容がDiscordにも届きます)</li>
+      <li>見通しが <b>上昇 & リスクオン</b> の日 → 個別の買い候補を <b>通常サイズ</b> で仕掛ける</li>
+      <li><b>下落、またはリスクオフ(VIX警戒)</b> の日 → 新規は <b>見送り、またはサイズ半分</b></li>
+      <li>実際の <b>売買価格(イン/損切り/利確/トレール)</b> は「🧪戦略検証」「🔎個別銘柄」のルールに従う</li>
+    </ol>
+    <div class="muted" style="font-size:.8rem">
+      的中率 <b>${pct(bt.hit_rate,1)}</b> は「方向の当てやすさ」。儲けやすさは日中(寄→引)の戦略リターン <b>${pct((s.long_flat||{}).total_return)}</b> で別物です。
+      アウトルックで<b>地合いを絞り</b>、個別ページで<b>価格を決める</b>── これが2ページの役割分担です。<b>投資助言ではありません。</b>
+    </div>
+  </section>`;
+  document.getElementById("content").innerHTML = verdict + action +
     summary + renderStrategyTable(s) + renderEquity(bt.equity) + renderByYear(bt.by_year) +
     `<section class="card"><div class="disc">
       ※ 本バックテストは日経225指数レベルの検証です。米国終値の特徴量(S&P500リターン・VIX変化・USD/JPYリターン)から

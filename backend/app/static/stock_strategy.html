@@ -125,10 +125,35 @@ function verdict(cfgs){
   </section>`;
 }
 
+function action(cfgs){
+  const arr=Object.entries(cfgs).filter(([k,s])=>s&&s.trades);
+  if(!arr.length) return "";
+  const [bk,bs]=arr.sort((a,b)=>b[1].expectancy_R-a[1].expectancy_R)[0];
+  const yen=Math.round(bs.expectancy_R*10000);
+  return `<section class="card" style="border-left:4px solid var(--amber)">
+    <h2 style="color:var(--text);font-size:1.05rem">▶ この結果を「実際の行動」に落とすと</h2>
+    <ol style="font-size:.95rem;line-height:1.9;padding-left:1.2rem;margin:.3rem 0">
+      <li><b>銘柄を探す</b>:上のナビ <b>🔎個別銘柄</b> を開き、方向 <b>「買い」</b> で絞る</li>
+      <li><b>入る</b>:その銘柄カードの「イン(成行、または押し目=25日線の指値)」の価格で買う</li>
+      <li><b>損切り・利確を置く</b>:同じカードの「損切り」「利確」、または検証で最良だった <b>トレーリング損切り</b>(高値更新で自動的に切り上げ・利確目標なしで伸ばす)</li>
+      <li><b>株数を決める(ここが最重要)</b>:1回の損失を <b>資金の1%まで</b> に抑える。<br>
+        <span style="font-family:monospace;background:var(--panel-2);padding:.1rem .4rem;border-radius:4px">株数 = 資金 × 1% ÷ (イン − 損切り)</span><br>
+        例)資金100万円 → 1回のリスク1万円。イン2,500円・損切り2,400円(差100円)なら <b>100株</b>。</li>
+      <li><b>管理する</b>:逆行したら損切りを<b>機械的に</b>実行 / 順行したらトレールを切り上げ / <b>★★★の悪材料</b>(ニュース)が出たら即撤退</li>
+    </ol>
+    <div class="muted" style="font-size:.8rem">
+      期待値の目安:最良は <b>${LABEL[bk]}</b> で1回あたり平均 <b>${bs.expectancy_R.toFixed(3)}R</b>
+      (=1Rを1万円のリスクにすると平均 <b>${yen>=0?"+":""}${yen.toLocaleString()}円/回</b>)。
+      勝率 ${(bs.win_rate*100).toFixed(0)}% なので<b>連敗は普通に起きます</b> ── だから④のサイズ管理で生き残るのが肝。
+      手数料・スリッページ・ばらつきで実際は目減りします。<b>投資助言ではありません。</b>
+    </div>
+  </section>`;
+}
+
 function render(bt){
   document.getElementById("sub").textContent=
     `大型株 ${bt.universe_size}銘柄 ・ ${bt.start}〜${bt.end} ・ 生成 ${bt.generated_at} ・ ロングのみ ・ 入口=25MA>75MA & MACD>0 の新規シグナル`;
-  document.getElementById("content").innerHTML = verdict(bt.configs) + table(bt.configs) + equity(bt.configs) +
+  document.getElementById("content").innerHTML = verdict(bt.configs) + action(bt.configs) + table(bt.configs) + equity(bt.configs) +
     `<section class="card"><div class="disc">
       入口: close>25日線>75日線 かつ MACDヒスト>0 の新規点で建て。基本=初期SL(−1.5×ATR)/TP(+2.5×ATR)。
       レジーム=TOPIXが200日線の上の時のみ建て。トレーリング=シャンデリア(高値−2.5×ATR)で追随しTP無し。
