@@ -10,6 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import os
 import sys
 from pathlib import Path
 
@@ -172,7 +173,9 @@ def main() -> int:
         logger.info("Accuracy (last %d): hit-rate %.0f%%, MAE %.2f%%",
                     accuracy["n"], accuracy["hit_rate"] * 100, accuracy["mae"] * 100)
 
-    message = format_brief(outlook, accuracy) + playbook_section()
+    dashboard_url = os.environ.get("DASHBOARD_URL", "https://homoiri119.github.io/market-outlook/")
+    footer = f"\n\n🔗 **ダッシュボード**: {dashboard_url}\n(アウトルック / 個別銘柄 / ニュース / 戦略検証 / バックテスト / セクター)"
+    message = format_brief(outlook, accuracy) + playbook_section() + footer
     sent = send_discord_message(message)
     logger.info("Discord notification sent: %s", sent)
 
