@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>ニュース・材料 | 寄り付き前アウトルック</title>
+<title>テーマ株 ニュース | 寄り付き前アウトルック</title>
 <style>
   :root{--bg:#0f172a;--panel:#1e293b;--panel-2:#273449;--text:#e2e8f0;--muted:#94a3b8;--line:#334155;--up:#22c55e;--up-bg:rgba(34,197,94,.14);--down:#ef4444;--down-bg:rgba(239,68,68,.14);--flat:#94a3b8;--flat-bg:rgba(148,163,184,.14);--accent:#38bdf8;}
   *{box-sizing:border-box;}
@@ -13,20 +13,23 @@
   header h1{font-size:1.15rem;margin:0;}
   .sub{color:var(--muted);font-size:.82rem;margin-bottom:1rem;}
   .card{background:var(--panel);border-radius:14px;padding:1rem 1.25rem;margin-bottom:1rem;}
-  .st-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem;}
+  .st-head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.4rem;}
   .pill{padding:.15rem .6rem;border-radius:999px;font-weight:700;font-size:.75rem;}
   .good{background:var(--up-bg);color:var(--up);} .bad{background:var(--down-bg);color:var(--down);} .neutral{background:var(--flat-bg);color:var(--flat);}
   ul.hl{list-style:none;margin:0;padding:0;}
   ul.hl li{padding:.4rem 0;border-top:1px solid var(--line);font-size:.9rem;line-height:1.4;}
   ul.hl li:first-child{border-top:none;}
-  ul.hl a{color:var(--text);text-decoration:none;}
-  ul.hl a:hover{text-decoration:underline;}
+  ul.hl a{color:var(--text);text-decoration:none;} ul.hl a:hover{text-decoration:underline;}
   .meta{color:var(--muted);font-size:.72rem;}
   .tag{font-size:.7rem;font-weight:700;padding:.05rem .35rem;border-radius:4px;margin-right:.3rem;}
   .tag.good{background:var(--up-bg);color:var(--up);} .tag.bad{background:var(--down-bg);color:var(--down);} .tag.mixed{background:var(--flat-bg);color:var(--text);}
   .muted{color:var(--muted);} .empty{color:var(--muted);padding:2rem 0;text-align:center;}
-  .controls{margin-bottom:.75rem;}
-  select{background:var(--panel-2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem;}
+  .qtext{color:var(--muted);font-size:.72rem;}
+  button,.btn{background:var(--accent);color:#04222e;border:none;font-weight:700;padding:.45rem .9rem;border-radius:8px;cursor:pointer;font-size:.82rem;text-decoration:none;display:inline-block;}
+  .btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line);}
+  textarea{width:100%;min-height:120px;background:var(--panel-2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:.6rem;font-family:ui-monospace,monospace;font-size:.82rem;}
+  details.editor summary{cursor:pointer;font-weight:700;color:var(--accent);margin-bottom:.5rem;}
+  .row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.5rem 0;}
 </style>
 </head>
 <body>
@@ -40,11 +43,25 @@
     <a href="./sector_backtest.html" style="color:#e2e8f0;text-decoration:none;border:1px solid #334155;border-radius:8px;padding:.4rem .7rem">🏭 セクター</a>
   </nav>
 
-  <header><h1>📰 ウォッチリスト ニュース・材料</h1></header>
+  <header><h1>📰 テーマ株 ニュース・材料</h1></header>
   <div class="sub" id="sub"></div>
-  <div class="controls">
-    <select id="filter">
-      <option value="">全銘柄</option>
+
+  <details class="editor card">
+    <summary>⚙️ テーマを編集(Web設定)</summary>
+    <div class="muted" style="font-size:.8rem;margin-bottom:.5rem">1行に1テーマ、<b>テーマ名 | 検索キーワード</b> の形式で入力。キーワードは <code>OR</code> やスペースで絞り込めます(Google News検索式)。</div>
+    <textarea id="ta" spellcheck="false" placeholder="半導体・AI | 半導体 関連株 OR AI半導体&#10;防衛 | 防衛 関連株 OR 防衛費"></textarea>
+    <div class="row">
+      <button onclick="genJson()">① JSONを生成してコピー</button>
+      <a class="btn ghost" id="ghlink" href="#" target="_blank" rel="noopener">② GitHubで themes.json を編集</a>
+      <span class="muted" id="copymsg" style="font-size:.78rem"></span>
+    </div>
+    <div class="muted" style="font-size:.75rem">手順: ①でJSONをコピー → ②で開いた themes.json に貼り付けて Commit → 次回のNews実行(平日7:00 または 手動)で反映されます。</div>
+    <textarea id="jsonout" spellcheck="false" style="min-height:90px;margin-top:.5rem;display:none"></textarea>
+  </details>
+
+  <div class="controls" style="margin-bottom:.75rem">
+    <select id="filter" style="background:var(--panel-2);border:1px solid var(--line);color:var(--text);border-radius:8px;padding:.45rem .7rem;font-size:.85rem">
+      <option value="">全テーマ</option>
       <option value="good">好材料あり</option>
       <option value="bad">悪材料あり</option>
     </select>
@@ -59,17 +76,16 @@ const SENT={good:"好材料優勢",bad:"悪材料優勢",neutral:"中立"};
 
 function card(s){
   const hl=(s.headlines||[]).map(h=>{
-    const safeLink = /^https?:\/\//.test(h.link)?h.link:"#";
-    const cat = (h.category&&h.category!=="その他")
-      ? `<span class="tag ${h.tag}">${esc(h.category)}${h.weight?"★".repeat(h.weight):""}</span>` : "";
+    const safeLink=/^https?:\/\//.test(h.link)?h.link:"#";
+    const cat=(h.category&&h.category!=="その他")?`<span class="tag ${h.tag}">${esc(h.category)}${h.weight?"★".repeat(h.weight):""}</span>`:"";
     return `<li>${cat}<a href="${esc(safeLink)}" target="_blank" rel="noopener noreferrer">${esc(h.title)}</a>
       <div class="meta">${esc(h.source)} ・ ${esc(h.published)}</div></li>`;
-  }).join("") || `<li class="muted">直近の該当ニュースなし</li>`;
+  }).join("")||`<li class="muted">直近の該当ニュースなし</li>`;
   const chips=(s.categories||[]).map(c=>`<span class="tag mixed">${esc(c)}</span>`).join(" ");
   return `<div class="card">
     <div class="st-head">
-      <div><b>${esc(s.name)}</b> <span class="muted">${esc(s.code)} ・ ${esc(s.sector)}</span></div>
-      <span class="pill ${s.sentiment}">${SENT[s.sentiment]||""} ・ 重要度スコア ${s.score>0?"+":""}${s.score}</span>
+      <div><b>${esc(s.name)}</b> <span class="qtext">🔎 ${esc(s.query)}</span></div>
+      <span class="pill ${s.sentiment}">${SENT[s.sentiment]||""} ・ 重要度 ${s.score>0?"+":""}${s.score}</span>
     </div>
     ${chips?`<div style="margin-bottom:.4rem">${chips}</div>`:""}
     <ul class="hl">${hl}</ul>
@@ -78,22 +94,49 @@ function card(s){
 
 function apply(){
   const f=document.getElementById("filter").value;
-  let list=DATA.stocks;
+  let list=DATA.themes||[];
   if(f==="good") list=list.filter(s=>s.good>0);
   if(f==="bad") list=list.filter(s=>s.bad>0);
-  document.getElementById("content").innerHTML = list.length?list.map(card).join(""):`<div class="empty">該当なし</div>`;
+  document.getElementById("content").innerHTML=list.length?list.map(card).join(""):`<div class="empty">該当なし</div>`;
+}
+
+// ---- theme editor ----
+function loadEditor(){
+  const ta=document.getElementById("ta");
+  const draft=localStorage.getItem("themesDraft");
+  const cfg=(DATA&&DATA.themes_config)||[];
+  ta.value = draft!=null ? draft : cfg.map(t=>`${t.name} | ${t.query}`).join("\n");
+  ta.addEventListener("input",()=>localStorage.setItem("themesDraft",ta.value));
+  // GitHub edit link derived from the Pages URL (owner.github.io/repo/...)
+  try{
+    const host=location.host, parts=location.pathname.split("/").filter(Boolean);
+    if(host.endsWith("github.io") && parts.length){
+      const owner=host.split(".")[0], repo=parts[0];
+      document.getElementById("ghlink").href=`https://github.com/${owner}/${repo}/edit/main/backend/data/themes.json`;
+    } else { document.getElementById("ghlink").href="https://github.com"; }
+  }catch(e){}
+}
+function genJson(){
+  const lines=document.getElementById("ta").value.split("\n").map(l=>l.trim()).filter(Boolean);
+  const themes=lines.map(l=>{const i=l.indexOf("|");return i<0?null:{name:l.slice(0,i).trim(),query:l.slice(i+1).trim()};}).filter(t=>t&&t.name&&t.query);
+  const json=JSON.stringify({themes},null,2);
+  const out=document.getElementById("jsonout"); out.style.display="block"; out.value=json;
+  const msg=document.getElementById("copymsg");
+  if(navigator.clipboard){navigator.clipboard.writeText(json).then(()=>msg.textContent="コピーしました ("+themes.length+"テーマ)").catch(()=>msg.textContent="下の枠を手動でコピーしてください");}
+  else{out.select();msg.textContent="下の枠を手動でコピーしてください";}
 }
 
 function render(d){
   DATA=d;
-  document.getElementById("sub").textContent=`ウォッチリスト ${d.count}銘柄 ・ 生成 ${d.generated_at} ・ Google News RSS + 材料辞書`;
-  if(!d.stocks||!d.stocks.length){document.getElementById("content").innerHTML=`<div class="empty">データがありません。watchlist.json に銘柄を追加してください。</div>`;return;}
+  document.getElementById("sub").textContent=`テーマ ${d.count}件 ・ 生成 ${d.generated_at} ・ Google News RSS + 材料辞書`;
+  loadEditor();
   document.getElementById("filter").addEventListener("change",apply);
+  if(!d.themes||!d.themes.length){document.getElementById("content").innerHTML=`<div class="empty">テーマがありません。上の「⚙️ テーマを編集」から設定してください。</div>`;return;}
   apply();
 }
 if(window.__NEWS__){ render(window.__NEWS__); }
 else{ fetch("./news.json").then(r=>r.ok?r.json():Promise.reject()).then(render)
-  .catch(()=>{document.getElementById("content").innerHTML=`<div class="empty">ニュースデータがまだありません(Newsワークフロー実行後に表示)。</div>`;});}
+  .catch(()=>{document.getElementById("content").innerHTML=`<div class="empty">ニュースデータがまだありません(Newsワークフロー実行後に表示)。</div>`;render({count:0,themes:[],themes_config:[]});});}
 </script>
 </body>
 </html>

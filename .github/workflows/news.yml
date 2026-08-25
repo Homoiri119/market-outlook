@@ -25,9 +25,7 @@ jobs:
           cache: pip
       - name: Install dependencies
         run: pip install -r backend/requirements.txt
-      - name: Fetch news and build page
-        env:
-          JQUANTS_API_KEY: ${{ secrets.JQUANTS_API_KEY }}
+      - name: Fetch theme news and build page
         run: python backend/scripts/run_news.py
       - name: Commit page
         run: |
