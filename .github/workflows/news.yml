@@ -3,7 +3,7 @@ name: News
 on:
   workflow_dispatch: {}
   schedule:
-    - cron: "0 22 * * 0-4"   # 07:00 JST weekdays
+    - cron: "40 21 * * 0-4"   # 06:40 JST weekdays (off-peak minute)
 
 permissions:
   contents: write
