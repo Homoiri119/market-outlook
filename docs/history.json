@@ -24,7 +24,14 @@
 "date": "2026-08-25",
 "direction": "UP",
 "expected_move": 0.006239506682150815,
-"actual_move": null,
-"hit": null
+"actual_move": -0.005079167205905435,
+"hit": false
+},
+{
+"date": "2026-08-26",
+"direction": "FLAT",
+"expected_move": 0.0007661621138234556,
+"actual_move": -0.0038255566114878447,
+"hit": false
 }
 ]
