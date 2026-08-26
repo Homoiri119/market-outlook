@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import sys
+import time
 from pathlib import Path
 
 # Make `import app...` work when run as a script or module.
@@ -21,9 +22,10 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.clients.discord_notifier import send_discord_message  # noqa: E402
-from app.services import analytics  # noqa: E402
+from app.services import analytics, selection  # noqa: E402
 from app.services.cloud_outlook import compute_stateless_outlook  # noqa: E402
 from app.services.morning_outlook import DIRECTION_LABELS_JP  # noqa: E402
+from app.services.news import fetch_news, summarize  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("run_cloud")
@@ -81,6 +83,62 @@ def format_brief(o: dict, accuracy: dict | None = None) -> str:
 
 def _yen(v) -> str:
     return "—" if v is None else f"{v:,}"
+
+
+def selection_section(outlook: dict, limit: int = 5, pool: int = 10) -> str:
+    """Rank buy candidates by signal × sector-tailwind × regime × per-stock news,
+    and format the top ones (with entry/SL/TP/trail) for Discord."""
+    f = DOCS_DIR / "analysis.json"
+    if not f.exists():
+        return ""
+    try:
+        stocks = json.loads(f.read_text(encoding="utf-8")).get("stocks", [])
+    except (ValueError, OSError):
+        return ""
+    if not stocks:
+        return ""
+
+    us = outlook.get("us_market")
+    d = outlook.get("direction", "")
+    regime = 1.0 if d in ("UP", "STRONG_UP") else -1.0 if d in ("DOWN", "STRONG_DOWN") else 0.0
+    if outlook.get("vix_regime") == "fear":
+        regime -= 1.0
+    elif outlook.get("vix_regime") == "elevated":
+        regime -= 0.5
+
+    candidates = selection.rank_base(stocks, us, regime)[:pool]
+
+    scored = []
+    for s in candidates:
+        headlines = fetch_news(s.get("name", ""), limit=4, days=5)
+        # Exclude candidates with a serious negative headline (下方修正・不祥事など).
+        if any((h.get("polarity", 0) < 0 and h.get("weight", 0) >= 3) for h in headlines):
+            continue
+        summ = summarize(headlines)
+        s["_final"] = s["sel_base"] + max(-3, min(3, summ.get("score", 0)))
+        s["_news"] = summ
+        scored.append(s)
+        time.sleep(0.3)
+    scored.sort(key=lambda x: x["_final"], reverse=True)
+    top = scored[:limit]
+
+    lines = ["", "🎯 **今日の買い候補ランキング**(シグナル×セクター追い風×地合い×ニュース)",
+             "※リスクは資金の1%に固定・トレーリングで利を伸ばす"]
+    if not top:
+        lines.append("条件を満たす候補なし(様子見)。")
+        return "\n".join(lines)
+    for i, s in enumerate(top, 1):
+        rr = f"  R:R 1:{s['risk_reward']}" if s.get("risk_reward") else ""
+        lines.append(
+            f"{i}. {s['name']}({s['code']}) 買い {_yen(s.get('current_price'))} / "
+            f"損切 {_yen(s.get('stop_loss'))} / 利確 {_yen(s.get('take_profit'))} / "
+            f"トレール {_yen(s.get('trail_stop'))}{rr}"
+        )
+        tw = s["sel_comp"]["sector_tw"] * 100
+        newstag = "・好材料" if s["_news"].get("sentiment") == "good" else ("・悪材料" if s["_news"].get("sentiment") == "bad" else "")
+        lines.append(f"   └ 根拠: シグナル{s['sel_comp']['tech']:.0f} ・ セクター追い風 {tw:+.1f}%{newstag}")
+    lines.append("→ 地合い(上のアウトルック)が弱い日はサイズ縮小か見送り。参考情報です。")
+    return "\n".join(lines)
 
 
 def playbook_section(limit: int = 5) -> str:
@@ -175,7 +233,7 @@ def main() -> int:
 
     dashboard_url = os.environ.get("DASHBOARD_URL", "https://homoiri119.github.io/market-outlook/")
     footer = f"\n\n🔗 **ダッシュボード**: {dashboard_url}\n(アウトルック / 個別銘柄 / ニュース / 戦略検証 / バックテスト / セクター)"
-    message = format_brief(outlook, accuracy) + playbook_section() + footer
+    message = format_brief(outlook, accuracy) + selection_section(outlook) + footer
     sent = send_discord_message(message)
     logger.info("Discord notification sent: %s", sent)
 
