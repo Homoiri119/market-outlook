@@ -3,9 +3,8 @@ name: Stock Analysis
 # Per-stock technical + fundamental analysis with ATR-based entry/TP/SL.
 # Fetches large-cap + watchlist stocks from J-Quants, so run manually or daily.
 on:
+  # 定時実行は Morning Routine に集約。ここは手動用。
   workflow_dispatch: {}
-  schedule:
-    - cron: "10 22 * * 0-4"   # 07:10 JST weekdays (feeds the 07:40 playbook; off-peak minute)
 
 permissions:
   contents: write

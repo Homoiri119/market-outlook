@@ -1,17 +1,21 @@
-name: Morning Outlook
+name: Morning Routine
 
-# 08:00 JST(東京市場が開く9:00の直前)に実行。
-# GitHub の cron は UTC。08:00 JST = 前日 23:00 UTC。
-# 月〜金(JST)= 日〜木(UTC)= 0-4。
+# 朝の一連(テーマニュース → 個別分析 → 寄り付き前アウトルック+買い候補ランキングをDiscord通知)を
+# 1ジョブで順番に実行し、docs をまとめてコミットする。
+#
+# GitHub の schedule は大幅遅延・取りこぼしがあるため、正確な時刻トリガーは
+# 外部cron(例: cron-job.org)から下記APIを叩いて起動する運用を推奨:
+#   POST https://api.github.com/repos/<owner>/<repo>/actions/workflows/morning-routine.yml/dispatches
+#   Header: Authorization: Bearer <PAT>, Accept: application/vnd.github+json
+#   Body:   {"ref":"main"}
 on:
-  # 定時実行は Morning Routine(外部cronで正確にトリガー)に集約。ここは手動用。
   workflow_dispatch: {}
 
 permissions:
   contents: write
 
 concurrency:
-  group: morning-outlook
+  group: morning-routine
   cancel-in-progress: false
 
 jobs:
@@ -30,14 +34,23 @@ jobs:
       - name: Install dependencies
         run: pip install -r backend/requirements.txt
 
-      - name: Compute outlook, notify Discord, build dashboard
+      - name: 1) Theme news
+        run: python backend/scripts/run_news.py
+
+      - name: 2) Per-stock analysis
+        env:
+          JQUANTS_API_KEY: ${{ secrets.JQUANTS_API_KEY }}
+        run: python backend/scripts/run_stock_analysis.py
+
+      - name: 3) Outlook + buy-candidate ranking -> Discord
         env:
           ANALYZE_DISCORD_WEBHOOK_URL: ${{ secrets.ANALYZE_DISCORD_WEBHOOK_URL }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
           JQUANTS_API_KEY: ${{ secrets.JQUANTS_API_KEY }}
+          DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
         run: python backend/scripts/run_cloud.py
 
-      - name: Commit updated dashboard
+      - name: Commit updated docs
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -45,7 +58,7 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "chore: morning outlook $(date -u +%Y-%m-%d)"
+            git commit -m "chore: morning routine $(date -u +%Y-%m-%d)"
             for i in 1 2 3; do
               git pull --rebase --autostash origin main && git push && break
               echo "push retry $i"; sleep 5

@@ -1,9 +1,8 @@
 name: News
 
 on:
+  # 定時実行は Morning Routine に集約。ここは手動用。
   workflow_dispatch: {}
-  schedule:
-    - cron: "40 21 * * 0-4"   # 06:40 JST weekdays (off-peak minute)
 
 permissions:
   contents: write
