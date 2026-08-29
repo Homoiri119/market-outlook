@@ -130,7 +130,8 @@ def selection_section(outlook: dict, limit: int = 5, pool: int = 10) -> str:
     lines = ["", "━━━━━━━━━━━",
              "🎯 **今日の買い候補**",
              "└ シグナル×追い風×地合い×ニュース",
-             "└ 損切=撤退 / 利確=目標 / ﾄﾚｰﾙ=上昇に追随する動く損切",
+             "└ 損切=撤退 / 利確=固定の目標",
+             "└ 🔻トレール=利確せず伸ばす別戦略(高値から一定幅で損切りを切り上げ)",
              "━━━━━━━━━━━"]
     if not top:
         lines.append("該当なし(様子見)。")
@@ -142,11 +143,14 @@ def selection_section(outlook: dict, limit: int = 5, pool: int = 10) -> str:
         newstag = "  🟢好材料" if sent == "good" else ("  🔴悪材料" if sent == "bad" else "")
         rr = f" ・ R:R 1:{s['risk_reward']}" if s.get("risk_reward") else ""
         tw = s["sel_comp"]["sector_tw"] * 100
+        cp, ts = s.get("current_price"), s.get("trail_stop")
         lines.append("")
         lines.append(f"{num} **{s['name']}**({s['code']}){newstag}")
-        lines.append(f"　🟢買 {_yen(s.get('current_price'))}　🎯利確 {_yen(s.get('take_profit'))}")
-        lines.append(f"　✂️損切 {_yen(s.get('stop_loss'))}　🔻ﾄﾚｰﾙ {_yen(s.get('trail_stop'))}")
-        lines.append(f"　📊 シグナル{s['sel_comp']['tech']:.0f} ・ 追い風{tw:+.1f}%{rr}")
+        lines.append(f"　🟢買 {_yen(cp)} → 🎯利確 {_yen(s.get('take_profit'))}")
+        lines.append(f"　✂️損切 {_yen(s.get('stop_loss'))}{rr}")
+        if cp and ts:  # トレールは「幅」で表示(絶対価格だと損切りと紛らわしいため)
+            lines.append(f"　🔻伸ばす場合: 利確せず高値−{_yen(round(cp - ts))}でトレール")
+        lines.append(f"　📊 シグナル{s['sel_comp']['tech']:.0f} ・ 追い風{tw:+.1f}%")
     lines.append("")
     lines.append("→ 地合いが弱い日はサイズ縮小か見送り。参考情報です。")
     return "\n".join(lines)
