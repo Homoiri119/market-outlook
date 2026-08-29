@@ -12,11 +12,12 @@ name: Morning Routine
 #   Header: Authorization: Bearer <PAT>, Accept: application/vnd.github+json  /  Body: {"ref":"main"}
 on:
   workflow_dispatch: {}
-  schedule:
-    - cron: "0 22 * * 0-4"    # 07:00 JST(平日=UTC日〜木)
-    - cron: "20 22 * * 0-4"   # 07:20 JST
-    - cron: "40 22 * * 0-4"   # 07:40 JST
-    - cron: "0 23 * * 0-4"    # 08:00 JST
+  schedule:                    # 早めに複数回。最初に動いた1回が送信し残りはスキップ(9時前着地を担保)
+    - cron: "30 21 * * 0-4"   # 06:30 JST(平日=UTC日〜木)
+    - cron: "50 21 * * 0-4"   # 06:50 JST
+    - cron: "10 22 * * 0-4"   # 07:10 JST
+    - cron: "30 22 * * 0-4"   # 07:30 JST
+    - cron: "50 22 * * 0-4"   # 07:50 JST
 
 permissions:
   contents: write
