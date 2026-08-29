@@ -52,28 +52,33 @@ def _pct(v, d=2):
 
 
 def format_brief(o: dict, accuracy: dict | None = None) -> str:
+    # スマホ(Discord)で読みやすいよう、1行を短く・縦積みにする。
     emoji = DIRECTION_EMOJI.get(o["direction"], "")
     label = DIRECTION_LABELS_JP.get(o["direction"], o["direction"])
     lines = [
-        f"{emoji} **東京市場 寄り付き前アウトルック ({o['date']})**",
+        f"{emoji} **東京市場 寄り前アウトルック**",
+        f"📅 {o['date']}",
         "",
-        f"見通し: **{label}**(予想寄り付き {_pct(o['expected_move'])}, 信頼度 {o['confidence']:.2f})",
+        f"📊 見通し: **{label}**",
+        f"　予想寄り {_pct(o['expected_move'])} ・ 信頼度 {o['confidence']:.2f}",
     ]
     if o.get("implied_open_level") and o.get("nikkei_prev_close"):
         lines.append(
-            f"日経225: 前日終値 {o['nikkei_prev_close']:,.0f} → 予想寄り {o['implied_open_level']:,.0f} 近辺"
+            f"　日経 {o['nikkei_prev_close']:,.0f} → 約 {o['implied_open_level']:,.0f}"
         )
     if o.get("expected_open_low") and o.get("expected_open_high"):
         lines.append(
-            f"予想レンジ: {o['expected_open_low']:,.0f} 〜 {o['expected_open_high']:,.0f} "
-            f"({_pct(o['expected_range_low'])} 〜 {_pct(o['expected_range_high'])})"
+            f"　レンジ {o['expected_open_low']:,.0f}〜{o['expected_open_high']:,.0f}"
         )
     if accuracy and accuracy.get("hit_rate") is not None:
+        lines.append("")
         lines.append(
-            f"直近{accuracy['n']}営業日 方向的中率: {accuracy['hit_rate'] * 100:.0f}% "
-            f"({accuracy['hits']}/{accuracy['n']}), 平均誤差 ±{accuracy['mae'] * 100:.2f}%"
+            f"🎯 直近{accuracy['n']}日 的中率 {accuracy['hit_rate'] * 100:.0f}% "
+            f"({accuracy['hits']}/{accuracy['n']})"
         )
+        lines.append(f"　平均誤差 ±{accuracy['mae'] * 100:.2f}%")
     if o.get("us_detail"):
+        lines.append("")
         lines.append(o["us_detail"])
     if o.get("narrative"):
         lines.append("")
@@ -122,22 +127,28 @@ def selection_section(outlook: dict, limit: int = 5, pool: int = 10) -> str:
     scored.sort(key=lambda x: x["_final"], reverse=True)
     top = scored[:limit]
 
-    lines = ["", "🎯 **今日の買い候補ランキング**(シグナル×セクター追い風×地合い×ニュース)",
-             "※リスクは資金の1%に固定・トレーリングで利を伸ばす"]
+    lines = ["", "━━━━━━━━━━━",
+             "🎯 **今日の買い候補**",
+             "└ シグナル×追い風×地合い×ニュース",
+             "└ 損切=撤退 / 利確=目標 / ﾄﾚｰﾙ=上昇に追随する動く損切",
+             "━━━━━━━━━━━"]
     if not top:
-        lines.append("条件を満たす候補なし(様子見)。")
+        lines.append("該当なし(様子見)。")
         return "\n".join(lines)
+    circled = "①②③④⑤⑥⑦⑧⑨⑩"
     for i, s in enumerate(top, 1):
-        rr = f"  R:R 1:{s['risk_reward']}" if s.get("risk_reward") else ""
-        lines.append(
-            f"{i}. {s['name']}({s['code']}) 買い {_yen(s.get('current_price'))} / "
-            f"損切 {_yen(s.get('stop_loss'))} / 利確 {_yen(s.get('take_profit'))} / "
-            f"トレール {_yen(s.get('trail_stop'))}{rr}"
-        )
+        num = circled[i - 1] if i <= len(circled) else f"{i}."
+        sent = s["_news"].get("sentiment")
+        newstag = "  🟢好材料" if sent == "good" else ("  🔴悪材料" if sent == "bad" else "")
+        rr = f" ・ R:R 1:{s['risk_reward']}" if s.get("risk_reward") else ""
         tw = s["sel_comp"]["sector_tw"] * 100
-        newstag = "・好材料" if s["_news"].get("sentiment") == "good" else ("・悪材料" if s["_news"].get("sentiment") == "bad" else "")
-        lines.append(f"   └ 根拠: シグナル{s['sel_comp']['tech']:.0f} ・ セクター追い風 {tw:+.1f}%{newstag}")
-    lines.append("→ 地合い(上のアウトルック)が弱い日はサイズ縮小か見送り。参考情報です。")
+        lines.append("")
+        lines.append(f"{num} **{s['name']}**({s['code']}){newstag}")
+        lines.append(f"　🟢買 {_yen(s.get('current_price'))}　🎯利確 {_yen(s.get('take_profit'))}")
+        lines.append(f"　✂️損切 {_yen(s.get('stop_loss'))}　🔻ﾄﾚｰﾙ {_yen(s.get('trail_stop'))}")
+        lines.append(f"　📊 シグナル{s['sel_comp']['tech']:.0f} ・ 追い風{tw:+.1f}%{rr}")
+    lines.append("")
+    lines.append("→ 地合いが弱い日はサイズ縮小か見送り。参考情報です。")
     return "\n".join(lines)
 
 
@@ -232,7 +243,8 @@ def main() -> int:
                     accuracy["n"], accuracy["hit_rate"] * 100, accuracy["mae"] * 100)
 
     dashboard_url = os.environ.get("DASHBOARD_URL", "https://homoiri119.github.io/market-outlook/")
-    footer = f"\n\n🔗 **ダッシュボード**: {dashboard_url}\n(アウトルック / 個別銘柄 / ニュース / 戦略検証 / バックテスト / セクター)"
+    footer = (f"\n\n━━━━━━━━━━━\n🔗 **ダッシュボード**\n{dashboard_url}\n"
+              "└ アウトルック / 個別銘柄 / ニュース\n└ 戦略検証 / バックテスト / セクター")
     message = format_brief(outlook, accuracy) + selection_section(outlook) + footer
     sent = send_discord_message(message)
     logger.info("Discord notification sent: %s", sent)
