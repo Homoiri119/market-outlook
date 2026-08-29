@@ -3,13 +3,20 @@ name: Morning Routine
 # 朝の一連(テーマニュース → 個別分析 → 寄り付き前アウトルック+買い候補ランキングをDiscord通知)を
 # 1ジョブで順番に実行し、docs をまとめてコミットする。
 #
-# GitHub の schedule は大幅遅延・取りこぼしがあるため、正確な時刻トリガーは
-# 外部cron(例: cron-job.org)から下記APIを叩いて起動する運用を推奨:
+# GitHub の schedule は遅延・取りこぼしがあるため、朝の時間帯に複数回スケジュールし、
+# 「その日すでに実行済みなら以降はスキップ」ガードで重複通知を防ぐ(= 最低1通は届く)。
+# concurrency で直列化しているので、先に動いた実行がマーカーをコミット→後続はスキップ。
+#
+# さらに分単位の正確さが必要なら、外部cron(cron-job.org 等)から下記APIを叩いて起動:
 #   POST https://api.github.com/repos/<owner>/<repo>/actions/workflows/morning-routine.yml/dispatches
-#   Header: Authorization: Bearer <PAT>, Accept: application/vnd.github+json
-#   Body:   {"ref":"main"}
+#   Header: Authorization: Bearer <PAT>, Accept: application/vnd.github+json  /  Body: {"ref":"main"}
 on:
   workflow_dispatch: {}
+  schedule:
+    - cron: "0 22 * * 0-4"    # 07:00 JST(平日=UTC日〜木)
+    - cron: "20 22 * * 0-4"   # 07:20 JST
+    - cron: "40 22 * * 0-4"   # 07:40 JST
+    - cron: "0 23 * * 0-4"    # 08:00 JST
 
 permissions:
   contents: write
@@ -25,24 +32,41 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Guard — skip if already run today (JST)
+        id: guard
+        run: |
+          today=$(TZ=Asia/Tokyo date +%F)
+          echo "today=$today"
+          if [ -f docs/.morning_state.json ] && grep -q "\"date\": \"$today\"" docs/.morning_state.json; then
+            echo "Already ran today ($today) — skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Set up Python
+        if: steps.guard.outputs.skip != 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
 
       - name: Install dependencies
+        if: steps.guard.outputs.skip != 'true'
         run: pip install -r backend/requirements.txt
 
       - name: 1) Theme news
+        if: steps.guard.outputs.skip != 'true'
         run: python backend/scripts/run_news.py
 
       - name: 2) Per-stock analysis
+        if: steps.guard.outputs.skip != 'true'
         env:
           JQUANTS_API_KEY: ${{ secrets.JQUANTS_API_KEY }}
         run: python backend/scripts/run_stock_analysis.py
 
       - name: 3) Outlook + buy-candidate ranking -> Discord
+        if: steps.guard.outputs.skip != 'true'
         env:
           ANALYZE_DISCORD_WEBHOOK_URL: ${{ secrets.ANALYZE_DISCORD_WEBHOOK_URL }}
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
@@ -50,15 +74,19 @@ jobs:
           DASHBOARD_URL: ${{ secrets.DASHBOARD_URL }}
         run: python backend/scripts/run_cloud.py
 
-      - name: Commit updated docs
+      - name: Mark done + commit docs
+        if: steps.guard.outputs.skip != 'true'
         run: |
+          today=$(TZ=Asia/Tokyo date +%F)
+          mkdir -p docs
+          echo "{\"date\": \"$today\"}" > docs/.morning_state.json
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add docs
           if git diff --staged --quiet; then
             echo "No changes to commit."
           else
-            git commit -m "chore: morning routine $(date -u +%Y-%m-%d)"
+            git commit -m "chore: morning routine $today"
             for i in 1 2 3; do
               git pull --rebase --autostash origin main && git push && break
               echo "push retry $i"; sleep 5
