@@ -65,7 +65,7 @@
 {
 "date": "2026-09-01",
 "direction": "STRONG_DOWN",
-"expected_move": -0.010889483225217472,
+"expected_move": -0.016958688226979733,
 "actual_move": -0.00643113448077487,
 "hit": true
 }
