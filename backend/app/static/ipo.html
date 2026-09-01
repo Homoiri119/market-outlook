@@ -135,7 +135,7 @@ function excludedBox(){
   return `<section class="card" style="border-left:4px solid var(--amber)">
     <h2 style="color:var(--text)">外れ値として除外(${DATA.excluded.length}件)</h2>
     <ul class="muted" style="font-size:.85rem;line-height:1.7;margin:.2rem 0;padding-left:1.2rem">${rows}</ul>
-    <div class="muted" style="font-size:.75rem">キオクシアのような数年に一度の巨大IPOや時価総額${(DATA.params.outlier_mktcap/1e8).toFixed(0)}億円超は、需給が特殊で再現性が低いため統計から除外しています。</div>
+    <div class="muted" style="font-size:.75rem">除外はキオクシア(数年に一度の外れ値)のみ。他の大型IPOはすべて統計に含めています。</div>
   </section>`;
 }
 

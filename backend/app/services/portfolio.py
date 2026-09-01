@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 
 INITIAL_CAPITAL = 1_000_000
 RISK_PCT = 0.01
-MAX_OPEN = 8          # cap concurrent paper positions
 LOT = 100             # Japanese round lot
 
 
@@ -53,16 +52,16 @@ def _shares(capital: float, risk_pct: float, entry: float, sl: float) -> int:
 
 
 def record_recommendations(data: dict, top: list[dict], date: str) -> None:
-    """Open a paper position for each new candidate not already held (open)."""
+    """Open a paper position for EVERY candidate (not already held). Sizing is
+    equal-risk (1% of the reference capital per trade), so it does not depend on
+    whether the capital could actually "afford" the shares — every candidate is
+    recorded, and positions are not capped."""
     open_codes = {p["code"] for p in data["positions"] if p["status"] == "open"}
-    n_open = len(open_codes)
     for s in top:
         code = str(s.get("code"))
         entry = s.get("current_price"); sl = s.get("stop_loss"); tp = s.get("take_profit")
         if code in open_codes:
             continue
-        if n_open >= MAX_OPEN:
-            break
         sh = _shares(data["initial_capital"], data["risk_pct"], entry, sl)
         if not sh or not entry or not tp:
             continue
@@ -85,7 +84,6 @@ def record_recommendations(data: dict, top: list[dict], date: str) -> None:
             "pnl_pct": 0.0,
         })
         open_codes.add(code)
-        n_open += 1
 
 
 def update_positions(data: dict, today: dt.date | None = None) -> None:

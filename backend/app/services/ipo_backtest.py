@@ -33,8 +33,7 @@ MIN_DEBUT_OFFSET_DAYS = 30    # first bar must be this far after window start to
 HOLDS = [0, 1, 3, 5, 10, 20]  # trading days held (0 = buy 初値 / sell same-day close)
 MIN_BARS_AFTER = 1            # need at least this many bars after debut
 NOTIONAL = 300_000            # ¥ invested per IPO for the money-terms equity curve
-OUTLIER_MKTCAP = 5e11         # ¥500B+ debut market cap = mega IPO (outlier)
-EXCLUDE_CODES = {"285A"}      # キオクシア(数年に一度の外れ値)
+EXCLUDE_CODES = {"285A"}      # キオクシア(数年に一度の外れ値)だけ除外。他の大型IPOは含める
 
 
 def _debut_mktcap(bars: pd.DataFrame) -> float | None:
@@ -153,8 +152,10 @@ def run_ipo_backtest(lookback_days: int = LOOKBACK_DAYS, max_candidates: int = 6
             "mkt_cap": mcap,
             "returns": rets,
         }
-        if code in EXCLUDE_CODES or (mcap is not None and mcap >= OUTLIER_MKTCAP):
-            rec["excluded_reason"] = "キオクシア" if code in EXCLUDE_CODES else "大型IPO(外れ値)"
+        # Only Kioxia (a once-in-years outlier) is excluded; all other IPOs, including
+        # other very large ones, are kept.
+        if code in EXCLUDE_CODES:
+            rec["excluded_reason"] = "キオクシア(数年に一度の外れ値)"
             excluded.append(rec)
         else:
             ipos.append(rec)
@@ -193,6 +194,6 @@ def run_ipo_backtest(lookback_days: int = LOOKBACK_DAYS, max_candidates: int = 6
         "equity": equity,
         "ipos": ipos,
         "excluded": excluded,
-        "params": {"lookback_days": lookback_days, "outlier_mktcap": OUTLIER_MKTCAP,
+        "params": {"lookback_days": lookback_days, "excluded_codes": sorted(EXCLUDE_CODES),
                    "min_debut_offset_days": MIN_DEBUT_OFFSET_DAYS},
     }

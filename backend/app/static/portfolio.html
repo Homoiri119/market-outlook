@@ -115,7 +115,7 @@ function positions(d){
     <div style="overflow-x:auto"><table>
     <thead><tr><th>推奨日</th><th>銘柄</th><th>イン</th><th>損切/利確</th><th>株数</th><th>現在/決済</th><th>損益</th><th>率</th></tr></thead>
     <tbody>${rows}</tbody></table></div>
-    <div class="muted" style="font-size:.75rem;margin-top:.5rem">保有中=含み損益(直近終値で評価)。決済=損切または利確に到達して確定。1トレードのリスクは初期資金の${(d.risk_pct*100).toFixed(0)}%固定・単元100株。</div>
+    <div class="muted" style="font-size:.75rem;margin-top:.5rem">保有中=含み損益(直近終値で評価)。決済=損切または利確に到達して確定。買い候補に挙がった全銘柄を記録(建玉数の上限なし)。1トレードのリスクは初期資金の${(d.risk_pct*100).toFixed(0)}%固定・単元100株。</div>
   </section>`;
 }
 
@@ -127,7 +127,7 @@ function render(d){
     equity(d) + positions(d) +
     `<section class="card"><div class="disc">
       毎朝Discordに出す買い候補を、推奨時の価格でエントリーしたと仮定して記録し、その後のJ-Quants日足で損切・利確の到達を判定します。
-      エントリーは推奨価格(前日終値ベース)を採用・手数料/スリッページ未考慮・現金制約は同時建玉数の上限のみ。
+      エントリーは推奨価格(前日終値ベース)を採用・手数料/スリッページ未考慮。買い候補の全銘柄を「1回=資金の1%リスク」で建てる戦略トラッカーで、現金制約は課していません(初期資金は評価額グラフの基準)。
       あくまで「推奨に従っていたら」を可視化するペーパー運用です。<b>投資助言ではありません。</b>
     </div></section>`;
 }
