@@ -5,12 +5,13 @@ This module records them as simulated positions, then re-prices open positions a
 subsequent J-Quants bars: a position closes at the stop-loss (損切) or take-profit (利確)
 if the day's range reaches it, otherwise it is marked-to-market at the latest close.
 
-Sizing follows the same 1%-risk rule shown on the strategy page:
-  shares = floor( initial_capital * risk_pct / (entry - stop_loss) ) rounded to a 100-lot.
+Sizing: a fixed 100 shares (one Japanese round lot) per position. The reference capital
+(運用資金) is auto-derived so it just exceeds the peak simultaneous cost of holding 100
+shares of everything (rounded up to ¥10,000) — this keeps 投下資金 ≤ 運用資金 while never
+dropping a candidate for lack of cash.
 
-The result feeds docs/portfolio.json and the 実績 dashboard page. Simplified paper
-tracking — no cash/margin constraint beyond a concurrent-position cap, entry assumed at
-the recommended price, fees/slippage ignored. Not investment advice.
+The result feeds docs/portfolio.json and the 実績 dashboard page. Entry assumed at the
+recommended price; fees/slippage ignored. Not investment advice.
 """
 
 from __future__ import annotations
@@ -18,15 +19,16 @@ from __future__ import annotations
 import datetime as dt
 import json
 import logging
+import math
 from pathlib import Path
 
 from app.clients.jquants_client import jquants_client
 
 logger = logging.getLogger(__name__)
 
-INITIAL_CAPITAL = 1_000_000
-RISK_PCT = 0.01
-LOT = 100             # Japanese round lot
+RISK_PCT = 0.01       # informational only (sizing is a fixed 100-share lot)
+LOT = 100             # Japanese round lot; every position = 1 lot
+CAPITAL_ROUND = 10_000  # 運用資金 is rounded up to this unit
 
 
 def load(docs_dir: Path) -> dict:
@@ -34,26 +36,17 @@ def load(docs_dir: Path) -> dict:
     if f.exists():
         try:
             d = json.loads(f.read_text(encoding="utf-8"))
-            d.setdefault("initial_capital", INITIAL_CAPITAL)
             d.setdefault("risk_pct", RISK_PCT)
             d.setdefault("positions", [])
             return d
         except (ValueError, OSError):
             logger.warning("Could not parse portfolio.json; starting fresh")
-    return {"initial_capital": INITIAL_CAPITAL, "risk_pct": RISK_PCT, "positions": []}
-
-
-def _shares(capital: float, risk_pct: float, entry: float, sl: float) -> int:
-    if entry is None or sl is None or entry <= sl:
-        return 0
-    raw = capital * risk_pct / (entry - sl)
-    lots = int(raw // LOT) * LOT
-    return max(LOT, lots)
+    return {"risk_pct": RISK_PCT, "positions": []}
 
 
 def open_position(data: dict, date: str, code: str, name: str, entry: float,
                   sl: float, tp: float, trail: float | None = None) -> bool:
-    """Append one paper position (equal-risk sizing). Skips duplicates (same
+    """Append one paper position (fixed 100-share lot). Skips duplicates (same
     code-date id) and codes already held open. Returns True if a position was added."""
     code = str(code)
     pos_id = f"{code}-{date}"
@@ -61,27 +54,42 @@ def open_position(data: dict, date: str, code: str, name: str, entry: float,
         return False
     if any(p["code"] == code and p["status"] == "open" for p in data["positions"]):
         return False
-    sh = _shares(data["initial_capital"], data["risk_pct"], entry, sl)
-    if not sh or not entry or not tp:
+    if not entry or not tp or not sl or entry <= sl:
         return False
     data["positions"].append({
         "id": pos_id, "code": code, "name": name or code, "date": date,
         "entry": entry, "stop_loss": sl, "take_profit": tp, "trail_stop": trail,
-        "shares": sh, "status": "open", "exit_date": None, "exit_price": None,
+        "shares": LOT, "status": "open", "exit_date": None, "exit_price": None,
         "reason": None, "last_price": entry, "pnl": 0.0, "pnl_pct": 0.0,
     })
     return True
 
 
 def record_recommendations(data: dict, top: list[dict], date: str) -> None:
-    """Open a paper position for EVERY candidate (not already held). Sizing is
-    equal-risk (1% of the reference capital per trade), so it does not depend on
-    whether the capital could actually "afford" the shares — every candidate is
-    recorded, and positions are not capped."""
+    """Open a 100-share paper position for EVERY candidate (not already held)."""
     for s in top:
         open_position(data, date, str(s.get("code")), s.get("name", ""),
                       s.get("current_price"), s.get("stop_loss"),
                       s.get("take_profit"), s.get("trail_stop"))
+
+
+def _auto_capital(positions: list[dict]) -> int:
+    """運用資金 = smallest ¥10,000 multiple that exceeds the PEAK simultaneous cost of
+    holding 100 shares of every open position over the tracked period."""
+    if not positions:
+        return CAPITAL_ROUND
+    # Concurrency changes only on open/exit dates; the peak is at some open date.
+    dates = sorted({p["date"] for p in positions}
+                   | {p["exit_date"] for p in positions if p.get("exit_date")})
+    peak = 0.0
+    for d in dates:
+        cost = 0.0
+        for p in positions:
+            end = p.get("exit_date") or "9999-12-31"
+            if p["date"] <= d <= end:  # ISO strings compare correctly
+                cost += LOT * p["entry"]
+        peak = max(peak, cost)
+    return int(math.floor(peak / CAPITAL_ROUND) + 1) * CAPITAL_ROUND
 
 
 def update_positions(data: dict, today: dt.date | None = None) -> None:
@@ -101,7 +109,8 @@ def update_positions(data: dict, today: dt.date | None = None) -> None:
             continue
         if bars.empty:
             continue
-        entry, sl, tp, sh = p["entry"], p["stop_loss"], p["take_profit"], p["shares"]
+        p["shares"] = LOT  # normalize (fixed 100-share lot)
+        entry, sl, tp, sh = p["entry"], p["stop_loss"], p["take_profit"], LOT
         exited = False
         for d, row in bars.iterrows():
             hi, lo, cl = row.get("high"), row.get("low"), row.get("close")
@@ -123,11 +132,22 @@ def update_positions(data: dict, today: dt.date | None = None) -> None:
 def summarize(data: dict) -> dict:
     """Compute summary KPIs and an equity curve (¥) over time."""
     positions = data["positions"]
-    init = data["initial_capital"]
+    # Normalize every position to a fixed 100-share lot (recompute P/L accordingly).
+    for p in positions:
+        p["shares"] = LOT
+        px = p["exit_price"] if p["status"] == "closed" else p.get("last_price", p["entry"])
+        if px is None:
+            px = p["entry"]
+        p["pnl"] = float((px - p["entry"]) * LOT)
+        p["pnl_pct"] = float(px / p["entry"] - 1) if p["entry"] else 0.0
+
+    init = _auto_capital(positions)
+    data["initial_capital"] = init
     closed = [p for p in positions if p["status"] == "closed"]
     open_ps = [p for p in positions if p["status"] == "open"]
     realized = sum(p["pnl"] for p in closed)
     unrealized = sum(p["pnl"] for p in open_ps)
+    deployed = sum(LOT * p["entry"] for p in open_ps)
     wins = [p for p in closed if p["pnl"] > 0]
 
     # Equity curve: initial capital, stepping at each closed exit (realized), then a
@@ -147,6 +167,8 @@ def summarize(data: dict) -> dict:
     return {
         "initial_capital": init,
         "risk_pct": data["risk_pct"],
+        "shares_per_trade": LOT,
+        "deployed": round(deployed),
         "equity": round(equity_now),
         "total_pnl": round(realized + unrealized),
         "total_pnl_pct": (realized + unrealized) / init if init else 0.0,
