@@ -43,6 +43,43 @@ def _debut_mktcap(bars: pd.DataFrame) -> float | None:
     return None
 
 
+# Markers that identify non-individual-stock listings (ETF/ETN/REIT/infra funds).
+_NON_STOCK_MKT = ("ETF", "ETN", "REIT", "インフラ", "ファンド", "出資証券", "外国")
+_NON_STOCK_NAME = ("ＥＴＦ", "ETF", "ＥＴＮ", "ETN", "上場投信", "上場インデックス",
+                   "リート", "ＲＥＩＴ", "REIT", "投資法人", "インフラファンド")
+_EMPTY_SECTOR = {"", "-", "－", "―", "‐", "−", "–", "該当なし", "なし"}
+
+
+def _equity_codes(master) -> set[str] | None:
+    """Codes that are individual stocks (exclude ETF/ETN/REIT/investment funds), using
+    the master's 33-sector name and market. Returns None if the master lacks the fields
+    to tell (so the caller skips filtering)."""
+    cols = set(master.columns)
+    sector_col = next((c for c in ("S33Nm", "S17Nm") if c in cols), None)
+    mkt_col = next((c for c in ("MktNm", "Mkt", "MarketName") if c in cols), None)
+    name_col = next((c for c in ("CoName", "CompanyName") if c in cols), None)
+    if sector_col is None and mkt_col is None:
+        return None
+    keep: set[str] = set()
+    for _, row in master.iterrows():
+        code = str(row["Code"])
+        # A real company has a 33-sector; ETFs/REITs/funds do not.
+        if sector_col is not None:
+            sec = str(row.get(sector_col, "") or "").strip()
+            if sec in _EMPTY_SECTOR:
+                continue
+        if mkt_col is not None:
+            mkt = str(row.get(mkt_col, "") or "")
+            if any(k in mkt for k in _NON_STOCK_MKT):
+                continue
+        if name_col is not None:
+            nm = str(row.get(name_col, "") or "")
+            if any(k in nm for k in _NON_STOCK_NAME):
+                continue
+        keep.add(code)
+    return keep
+
+
 def _pre_existing_codes(window_start: dt.date) -> set[str]:
     """Union of codes that traded on the first few trading days from window_start."""
     codes: set[str] = set()
@@ -120,12 +157,17 @@ def run_ipo_backtest(lookback_days: int = LOOKBACK_DAYS, max_candidates: int = 6
             f"{len(pre_existing)} codes — the endpoint may be unavailable on this plan. "
             "Provide a curated IPO list instead."
         )
+    # Restrict to individual stocks (exclude ETF/ETN/REIT/investment funds).
+    equity = _equity_codes(master)
+    if equity is not None:
+        logger.info("Equity (non-fund) codes in master: %d / %d", len(equity), len(all_codes))
     # Candidates = listed after the window start (missing from the early snapshot).
-    candidates = [c for c in all_codes if c not in pre_existing][:max_candidates]
+    candidates = [c for c in all_codes
+                  if c not in pre_existing and (equity is None or c in equity)][:max_candidates]
     logger.info("IPO candidates to probe: %d", len(candidates))
 
-    ipos: list[dict] = []       # detected, kept
-    excluded: list[dict] = []   # detected but excluded (Kioxia / mega-cap)
+    ipos: list[dict] = []       # detected individual-stock IPOs, kept
+    excluded: list[dict] = []   # detected but excluded (Kioxia only)
     for code in candidates:
         try:
             bars = jquants_client.fetch_daily_quotes(code, window_start, end)

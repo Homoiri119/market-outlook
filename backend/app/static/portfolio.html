@@ -55,59 +55,80 @@ function yen(v){return v==null?"—":(v>=0?"+":"")+Math.round(v).toLocaleString(
 function yen0(v){return v==null?"—":Math.round(v).toLocaleString()+"円";}
 function pct(v,d=1){return v==null?"—":(v*100>=0?"+":"")+(v*100).toFixed(d)+"%";}
 
-function kpis(d){
-  const col=d.total_pnl>=0?"var(--up)":"var(--down)";
+let DATA=null;
+const LS_KEY="pf_capital";
+function baseInit(){return (DATA&&DATA.initial_capital)||1000000;}
+function getCap(){ try{const v=parseFloat(localStorage.getItem(LS_KEY)); if(v&&v>0) return v;}catch(e){} return baseInit(); }
+function setCap(v){ try{localStorage.setItem(LS_KEY,String(v));}catch(e){} }
+
+function controls(cap){
+  return `<section class="card"><div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
+    <label style="font-size:.85rem;color:var(--muted)">運用資金(円)</label>
+    <input id="capIn" type="number" min="1" step="10000" value="${cap}" style="background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:.4rem .6rem;width:150px;font-size:.9rem">
+    <button id="capApply" style="background:var(--accent);color:#052132;border:none;border-radius:8px;padding:.42rem .8rem;font-weight:700;cursor:pointer">反映</button>
+    <button id="capReset" style="background:var(--panel-2);color:var(--text);border:1px solid var(--line);border-radius:8px;padding:.42rem .8rem;cursor:pointer">100万に戻す</button>
+    <span class="muted" style="font-size:.75rem">入力額を基準に¥を換算(%は資金に依らず不変)。この端末に保存されます。</span>
+  </div></section>`;
+}
+
+function kpis(cap,scale){
+  const totPnl=DATA.total_pnl*scale, eq=cap+totPnl;
+  const deployed=(DATA.positions||[]).filter(p=>p.status==="open").reduce((a,p)=>a+p.entry*p.shares,0)*scale;
+  const col=DATA.total_pnl>=0?"var(--up)":"var(--down)";
   return `<div class="kpis">
-    <div class="kpi"><div class="k">初期資金</div><div class="v">${yen0(d.initial_capital)}</div></div>
-    <div class="kpi"><div class="k">現在の評価額</div><div class="v">${yen0(d.equity)}</div></div>
-    <div class="kpi"><div class="k">総損益</div><div class="v" style="color:${col}">${yen(d.total_pnl)}</div><div class="k" style="color:${col}">${pct(d.total_pnl_pct)}</div></div>
-    <div class="kpi"><div class="k">確定 / 含み</div><div class="v" style="font-size:1rem">${yen(d.realized)}<br>${yen(d.unrealized)}</div></div>
-    <div class="kpi"><div class="k">勝率(確定)</div><div class="v">${d.win_rate==null?"—":(d.win_rate*100).toFixed(0)+"%"}</div><div class="k">${d.n_open}保有 / ${d.n_closed}決済</div></div>
+    <div class="kpi"><div class="k">運用資金</div><div class="v">${yen0(cap)}</div></div>
+    <div class="kpi"><div class="k">評価額</div><div class="v">${yen0(eq)}</div></div>
+    <div class="kpi"><div class="k">総損益(率)</div><div class="v" style="color:${col}">${pct(DATA.total_pnl_pct)}</div><div class="k" style="color:${col}">${yen(totPnl)}</div></div>
+    <div class="kpi"><div class="k">確定 / 含み</div><div class="v" style="font-size:1rem">${yen(DATA.realized*scale)}<br>${yen(DATA.unrealized*scale)}</div></div>
+    <div class="kpi"><div class="k">投下資金(現建玉)</div><div class="v" style="font-size:1rem">${yen0(deployed)}</div><div class="k">${DATA.n_open}保有 / ${DATA.n_closed}決済 ・ 勝率${DATA.win_rate==null?"—":(DATA.win_rate*100).toFixed(0)+"%"}</div></div>
   </div>`;
 }
 
-function equity(d){
-  const pts=d.curve||[];
+function equity(cap,scale){
+  const pts=DATA.curve||[]; const base=baseInit();
   if(pts.length<2) return `<section class="card"><h2>評価額の推移</h2><div class="muted">まだ推移を描くデータがありません(数日の運用後に表示)。</div></section>`;
-  const W=960,H=300,padL=70,padR=20,padT=14,padB=24;
-  let vals=pts.map(p=>p.equity); const base=d.initial_capital; vals.push(base);
+  const sv=pts.map(p=>({v:cap+(p.equity-base)*scale, r:(p.equity-base)/base}));
+  const W=960,H=300,padL=84,padR=20,padT=14,padB=24;
+  let vals=sv.map(p=>p.v); vals.push(cap);
   let min=Math.min(...vals),max=Math.max(...vals);const pad=(max-min)*0.08||1;min-=pad;max+=pad;
-  const x=i=>padL+(i*(W-padL-padR))/(pts.length-1);
+  const x=i=>padL+(i*(W-padL-padR))/(sv.length-1);
   const y=v=>padT+(H-padT-padB)*(1-(v-min)/(max-min));
-  const line=pts.map((p,i)=>`${x(i)},${y(p.equity)}`).join(" ");
-  const baseY=y(base), last=pts[pts.length-1].equity;
-  const col=last>=base?"var(--up)":"var(--down)";
+  const line=sv.map((p,i)=>`${x(i)},${y(p.v)}`).join(" ");
+  const baseY=y(cap), last=sv[sv.length-1];
+  const col=last.v>=cap?"var(--up)":"var(--down)";
   return `<section class="card">
     <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:.5rem">
       <h2 style="margin:0">評価額の推移</h2>
-      <div style="font-weight:700;color:${col}">${yen0(last)} (${yen(last-base)})</div>
+      <div style="font-weight:700;color:${col}">${yen0(last.v)} (${pct(last.r)})</div>
     </div>
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
       <line x1="${padL}" y1="${baseY}" x2="${W-padR}" y2="${baseY}" stroke="var(--muted)" stroke-dasharray="4 4" opacity=".5"/>
       <polyline points="${line}" fill="none" stroke="${col}" stroke-width="2"/>
       <text class="glabel" x="4" y="${y(max)+4}">${Math.round(max).toLocaleString()}</text>
-      <text class="glabel" x="4" y="${baseY+4}">初期 ${Math.round(base).toLocaleString()}</text>
+      <text class="glabel" x="4" y="${baseY+4}">運用資金 ${Math.round(cap).toLocaleString()}</text>
       <text class="glabel" x="4" y="${y(min)+4}">${Math.round(min).toLocaleString()}</text>
     </svg>
-    <div class="muted" style="font-size:.75rem;margin-top:.3rem">初期資金からの評価額。確定損益で階段状に動き、右端は含み損益も反映した現在値。</div>
+    <div class="muted" style="font-size:.75rem;margin-top:.3rem">運用資金からの評価額。%は資金に依らず不変で、¥は入力額に換算。確定損益で階段状に動き、右端は含み損益も反映した現在値。</div>
   </section>`;
 }
 
-function positions(d){
-  if(!d.positions||!d.positions.length) return `<section class="card"><h2>建玉一覧</h2><div class="muted">まだ推奨から記録された建玉がありません。</div></section>`;
-  const rows=d.positions.map(p=>{
+function positions(scale){
+  const ps=DATA.positions||[];
+  if(!ps.length) return `<section class="card"><h2>建玉一覧</h2><div class="muted">まだ推奨から記録された建玉がありません。</div></section>`;
+  const rows=ps.map(p=>{
     const badge = p.status==="open" ? `<span class="badge b-open">保有中</span>`
       : (p.reason==="利確" ? `<span class="badge b-tp">利確</span>` : `<span class="badge b-sl">損切</span>`);
     const px = p.status==="open" ? p.last_price : p.exit_price;
     const cls = p.pnl>=0?"pos":"neg";
+    const sh = Math.round(p.shares*scale);
     return `<tr>
       <td>${p.date}</td>
       <td>${p.name}<span class="muted">(${p.code})</span> ${badge}</td>
       <td>${Math.round(p.entry).toLocaleString()}</td>
       <td class="muted">${Math.round(p.stop_loss).toLocaleString()}/${Math.round(p.take_profit).toLocaleString()}</td>
-      <td>${p.shares.toLocaleString()}</td>
+      <td>${sh.toLocaleString()}</td>
       <td>${px==null?"—":Math.round(px).toLocaleString()}</td>
-      <td class="${cls}">${yen(p.pnl)}</td>
+      <td class="${cls}">${yen(p.pnl*scale)}</td>
       <td class="${cls}">${pct(p.pnl_pct)}</td>
     </tr>`;
   }).join("");
@@ -115,25 +136,34 @@ function positions(d){
     <div style="overflow-x:auto"><table>
     <thead><tr><th>推奨日</th><th>銘柄</th><th>イン</th><th>損切/利確</th><th>株数</th><th>現在/決済</th><th>損益</th><th>率</th></tr></thead>
     <tbody>${rows}</tbody></table></div>
-    <div class="muted" style="font-size:.75rem;margin-top:.5rem">保有中=含み損益(直近終値で評価)。決済=損切または利確に到達して確定。買い候補に挙がった全銘柄を記録(建玉数の上限なし)。1トレードのリスクは初期資金の${(d.risk_pct*100).toFixed(0)}%固定・単元100株。</div>
+    <div class="muted" style="font-size:.75rem;margin-top:.5rem">保有中=含み損益(直近終値で評価)。決済=損切または利確に到達して確定。買い候補に挙がった全銘柄を記録(建玉数の上限なし)。1トレードのリスクは運用資金の${(DATA.risk_pct*100).toFixed(0)}%固定・単元100株。株数・¥は入力した運用資金に換算(%は不変)。</div>
   </section>`;
 }
 
-function render(d){
+function render(){
+  const cap=getCap(), scale=cap/baseInit();
   document.getElementById("sub").textContent =
-    `Discordの買い候補を自動記録・追跡 ・ 初期資金 ${yen0(d.initial_capital)} ・ 1回リスク ${(d.risk_pct*100).toFixed(0)}% ・ 生成 ${d.generated_at||""}`;
+    `Discordの買い候補を自動記録・追跡 ・ 運用資金 ${yen0(cap)}(変更可)・ 1回リスク ${(DATA.risk_pct*100).toFixed(0)}% ・ 生成 ${DATA.generated_at||""}`;
   document.getElementById("content").innerHTML =
-    `<section class="card">${kpis(d)}</section>` +
-    equity(d) + positions(d) +
+    controls(cap) +
+    `<section class="card">${kpis(cap,scale)}</section>` +
+    equity(cap,scale) + positions(scale) +
     `<section class="card"><div class="disc">
       毎朝Discordに出す買い候補を、推奨時の価格でエントリーしたと仮定して記録し、その後のJ-Quants日足で損切・利確の到達を判定します。
-      エントリーは推奨価格(前日終値ベース)を採用・手数料/スリッページ未考慮。買い候補の全銘柄を「1回=資金の1%リスク」で建てる戦略トラッカーで、現金制約は課していません(初期資金は評価額グラフの基準)。
+      エントリーは推奨価格(前日終値ベース)を採用・手数料/スリッページ未考慮。買い候補の全銘柄を「1回=運用資金の1%リスク」で建てる戦略トラッカーです。
+      同時に多数の建玉を持つ日は<b>投下資金が運用資金を上回る</b>ため、¥は「その運用資金で1%リスク運用したら」の理論値、%(資金非依存)が実力値です。上の欄に実際の資金を入れると換算表示されます。
       あくまで「推奨に従っていたら」を可視化するペーパー運用です。<b>投資助言ではありません。</b>
     </div></section>`;
+  const inp=document.getElementById("capIn");
+  const apply=()=>{ const v=parseFloat(inp.value); if(v&&v>0){ setCap(v); render(); } };
+  document.getElementById("capApply").onclick=apply;
+  inp.addEventListener("keydown",e=>{ if(e.key==="Enter") apply(); });
+  document.getElementById("capReset").onclick=()=>{ setCap(baseInit()); render(); };
 }
 
-if(window.__PF__){ render(window.__PF__); }
-else { fetch("./portfolio.json").then(r=>r.ok?r.json():Promise.reject()).then(render)
+function boot(d){ DATA=d; render(); }
+if(window.__PF__){ boot(window.__PF__); }
+else { fetch("./portfolio.json").then(r=>r.ok?r.json():Promise.reject()).then(boot)
   .catch(()=>{document.getElementById("content").innerHTML=`<div class="empty">まだ実績データがありません(翌朝の通知以降に記録が始まります)。</div>`;});}
 </script>
 </body>
