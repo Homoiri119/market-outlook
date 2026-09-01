@@ -51,39 +51,37 @@ def _shares(capital: float, risk_pct: float, entry: float, sl: float) -> int:
     return max(LOT, lots)
 
 
+def open_position(data: dict, date: str, code: str, name: str, entry: float,
+                  sl: float, tp: float, trail: float | None = None) -> bool:
+    """Append one paper position (equal-risk sizing). Skips duplicates (same
+    code-date id) and codes already held open. Returns True if a position was added."""
+    code = str(code)
+    pos_id = f"{code}-{date}"
+    if any(p["id"] == pos_id for p in data["positions"]):
+        return False
+    if any(p["code"] == code and p["status"] == "open" for p in data["positions"]):
+        return False
+    sh = _shares(data["initial_capital"], data["risk_pct"], entry, sl)
+    if not sh or not entry or not tp:
+        return False
+    data["positions"].append({
+        "id": pos_id, "code": code, "name": name or code, "date": date,
+        "entry": entry, "stop_loss": sl, "take_profit": tp, "trail_stop": trail,
+        "shares": sh, "status": "open", "exit_date": None, "exit_price": None,
+        "reason": None, "last_price": entry, "pnl": 0.0, "pnl_pct": 0.0,
+    })
+    return True
+
+
 def record_recommendations(data: dict, top: list[dict], date: str) -> None:
     """Open a paper position for EVERY candidate (not already held). Sizing is
     equal-risk (1% of the reference capital per trade), so it does not depend on
     whether the capital could actually "afford" the shares — every candidate is
     recorded, and positions are not capped."""
-    open_codes = {p["code"] for p in data["positions"] if p["status"] == "open"}
     for s in top:
-        code = str(s.get("code"))
-        entry = s.get("current_price"); sl = s.get("stop_loss"); tp = s.get("take_profit")
-        if code in open_codes:
-            continue
-        sh = _shares(data["initial_capital"], data["risk_pct"], entry, sl)
-        if not sh or not entry or not tp:
-            continue
-        data["positions"].append({
-            "id": f"{code}-{date}",
-            "code": code,
-            "name": s.get("name", code),
-            "date": date,
-            "entry": entry,
-            "stop_loss": sl,
-            "take_profit": tp,
-            "trail_stop": s.get("trail_stop"),
-            "shares": sh,
-            "status": "open",
-            "exit_date": None,
-            "exit_price": None,
-            "reason": None,
-            "last_price": entry,
-            "pnl": 0.0,
-            "pnl_pct": 0.0,
-        })
-        open_codes.add(code)
+        open_position(data, date, str(s.get("code")), s.get("name", ""),
+                      s.get("current_price"), s.get("stop_loss"),
+                      s.get("take_profit"), s.get("trail_stop"))
 
 
 def update_positions(data: dict, today: dt.date | None = None) -> None:
