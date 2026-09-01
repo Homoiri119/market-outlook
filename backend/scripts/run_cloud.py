@@ -22,7 +22,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.clients.discord_notifier import send_discord_message  # noqa: E402
-from app.services import analytics, selection  # noqa: E402
+from app.services import analytics, portfolio, selection  # noqa: E402
 from app.services.cloud_outlook import compute_stateless_outlook  # noqa: E402
 from app.services.morning_outlook import DIRECTION_LABELS_JP  # noqa: E402
 from app.services.news import fetch_news, summarize  # noqa: E402
@@ -33,6 +33,7 @@ logger = logging.getLogger("run_cloud")
 DOCS_DIR = REPO_ROOT / "docs"
 HISTORY_FILE = DOCS_DIR / "history.json"
 TEMPLATE = BACKEND_DIR / "app" / "static" / "dashboard.html"
+PORTFOLIO_TEMPLATE = BACKEND_DIR / "app" / "static" / "portfolio.html"
 
 DIRECTION_EMOJI = {
     "STRONG_UP": "🚀",
@@ -90,18 +91,19 @@ def _yen(v) -> str:
     return "—" if v is None else f"{v:,}"
 
 
-def selection_section(outlook: dict, limit: int = 5, pool: int = 10) -> str:
+def rank_candidates(outlook: dict, limit: int = 5, pool: int = 10) -> list[dict]:
     """Rank buy candidates by signal × sector-tailwind × regime × per-stock news,
-    and format the top ones (with entry/SL/TP/trail) for Discord."""
+    excluding those with a serious negative headline. Returns the structured top list
+    (reused for both the Discord message and the paper-portfolio tracker)."""
     f = DOCS_DIR / "analysis.json"
     if not f.exists():
-        return ""
+        return []
     try:
         stocks = json.loads(f.read_text(encoding="utf-8")).get("stocks", [])
     except (ValueError, OSError):
-        return ""
+        return []
     if not stocks:
-        return ""
+        return []
 
     us = outlook.get("us_market")
     d = outlook.get("direction", "")
@@ -125,7 +127,13 @@ def selection_section(outlook: dict, limit: int = 5, pool: int = 10) -> str:
         scored.append(s)
         time.sleep(0.3)
     scored.sort(key=lambda x: x["_final"], reverse=True)
-    top = scored[:limit]
+    return scored[:limit]
+
+
+def selection_section(outlook: dict, top: list[dict] | None = None, limit: int = 5, pool: int = 10) -> str:
+    """Format the ranked buy candidates (with entry/SL/TP/trail) for Discord."""
+    if top is None:
+        top = rank_candidates(outlook, limit, pool)
 
     lines = ["", "━━━━━━━━━━━",
              "🎯 **今日の買い候補**",
@@ -235,6 +243,25 @@ def render_site(o: dict, history: list[dict]) -> None:
     (DOCS_DIR / ".nojekyll").write_text("", encoding="utf-8")
 
 
+def track_portfolio(top: list[dict], date: str) -> None:
+    """Record today's buy candidates as paper positions, re-price open ones against
+    the latest bars, and write docs/portfolio.json + docs/portfolio.html."""
+    pdata = portfolio.load(DOCS_DIR)
+    portfolio.record_recommendations(pdata, top, date)
+    portfolio.update_positions(pdata)
+    summary = portfolio.summarize(pdata)
+    summary["generated_at"] = _jst_now().strftime("%Y-%m-%d %H:%M JST")
+    DOCS_DIR.mkdir(parents=True, exist_ok=True)
+    # portfolio.json doubles as the page's data source AND the next run's saved state
+    # (it carries initial_capital / risk_pct / positions that load() reads back).
+    (DOCS_DIR / "portfolio.json").write_text(json.dumps(summary, ensure_ascii=False), encoding="utf-8")
+    template = PORTFOLIO_TEMPLATE.read_text(encoding="utf-8")
+    html = template.replace("</head>", "<script>window.__PF__ = " + json.dumps(summary, ensure_ascii=False) + ";</script>\n</head>", 1)
+    (DOCS_DIR / "portfolio.html").write_text(html, encoding="utf-8")
+    logger.info("Portfolio: equity ¥%s (%d open / %d closed)",
+                f"{summary['equity']:,}", summary["n_open"], summary["n_closed"])
+
+
 def main() -> int:
     outlook = compute_stateless_outlook()
     actual_gaps = outlook.pop("actual_gaps", {})  # internal; not part of the stored outlook
@@ -248,10 +275,17 @@ def main() -> int:
 
     dashboard_url = os.environ.get("DASHBOARD_URL", "https://homoiri119.github.io/market-outlook/")
     footer = (f"\n\n━━━━━━━━━━━\n🔗 **ダッシュボード**\n{dashboard_url}\n"
-              "└ アウトルック / 個別銘柄 / ニュース\n└ 戦略検証 / バックテスト / セクター")
-    message = format_brief(outlook, accuracy) + selection_section(outlook) + footer
+              "└ アウトルック / 個別銘柄 / ニュース / 💼実績\n└ 戦略検証 / バックテスト / セクター / 🆕IPO")
+    top = rank_candidates(outlook)
+    message = format_brief(outlook, accuracy) + selection_section(outlook, top=top) + footer
     sent = send_discord_message(message)
     logger.info("Discord notification sent: %s", sent)
+
+    # Track the recommended candidates as a paper portfolio (best-effort; needs J-Quants).
+    try:
+        track_portfolio(top, outlook["date"])
+    except Exception:
+        logger.exception("Portfolio tracking failed (skipped)")
 
     render_site(outlook, history)
     logger.info("Wrote docs/index.html and docs/history.json (%d points)", len(history))

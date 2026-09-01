@@ -162,6 +162,18 @@ class JQuantsClient:
         df["return_pct"] = df["close"].pct_change()
         return df
 
+    def fetch_quotes_by_date(self, date: dt.date) -> list[dict]:
+        """Fetch every stock's daily bar for a single date via V2 /equities/bars/daily
+        (`date` param). Returns raw rows (each has a `Code`); [] if unavailable.
+        Used to snapshot the set of listed codes on a day (for IPO detection)."""
+        try:
+            return self._get_paginated(
+                "/equities/bars/daily", {"date": date.isoformat()}, "data"
+            )
+        except Exception:
+            logger.info("bars/daily by-date unavailable for %s", date, exc_info=True)
+            return []
+
     def fetch_topix_history(self, start: dt.date, end: dt.date) -> pd.DataFrame:
         """Fetch TOPIX index history via V2 /indices/bars/daily/topix (cols O/H/L/C)."""
         rows = self._get_paginated(
