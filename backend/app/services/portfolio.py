@@ -44,6 +44,28 @@ def load(docs_dir: Path) -> dict:
     return {"risk_pct": RISK_PCT, "positions": []}
 
 
+def regime_by_date(docs_dir: Path) -> dict[str, dict]:
+    """Map each date to that morning's outlook {dir, move} from docs/history.json."""
+    f = docs_dir / "history.json"
+    if not f.exists():
+        return {}
+    try:
+        hist = json.loads(f.read_text(encoding="utf-8"))
+    except (ValueError, OSError):
+        return {}
+    return {h["date"]: {"dir": h.get("direction"), "move": h.get("expected_move")}
+            for h in hist if h.get("date")}
+
+
+def attach_regime(positions: list[dict], docs_dir: Path) -> None:
+    """Tag each position with the recommendation-day outlook (地合い)."""
+    reg = regime_by_date(docs_dir)
+    for p in positions:
+        r = reg.get(p.get("date"))
+        p["reg_dir"] = r["dir"] if r else None
+        p["reg_move"] = r["move"] if r else None
+
+
 def open_position(data: dict, date: str, code: str, name: str, entry: float,
                   sl: float, tp: float, trail: float | None = None) -> bool:
     """Append one paper position (fixed 100-share lot). Skips duplicates (same

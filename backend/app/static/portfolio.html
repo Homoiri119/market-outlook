@@ -152,6 +152,14 @@ function equity(v){
   </section>`;
 }
 
+const REG={STRONG_UP:["🚀","強上昇","var(--up)"],UP:["📈","上昇","var(--up)"],FLAT:["➡️","横ばい","var(--muted)"],DOWN:["📉","下落","var(--down)"],STRONG_DOWN:["⚠️","強下落","var(--down)"]};
+function regCell(p){
+  const r=REG[p.reg_dir];
+  if(!r) return `<td class="muted" style="text-align:left">—</td>`;
+  const mv = p.reg_move!=null ? `<span class="muted"> ${(p.reg_move*100>=0?"+":"")+(p.reg_move*100).toFixed(1)}%</span>` : "";
+  return `<td style="text-align:left;color:${r[2]};font-size:.82rem;white-space:nowrap">${r[0]}${r[1]}${mv}</td>`;
+}
+
 function positions(v){
   const ps=v.positions||[];
   if(!ps.length) return `<section class="card"><h2>建玉一覧</h2><div class="muted">まだ推奨から記録された建玉がありません。</div></section>`;
@@ -162,6 +170,7 @@ function positions(v){
     const cls = p.pnl>=0?"pos":"neg";
     return `<tr>
       <td>${p.date}</td>
+      ${regCell(p)}
       <td>${p.name}<span class="muted">(${p.code})</span> ${badge}</td>
       <td>${Math.round(p.entry).toLocaleString()}</td>
       <td class="muted">${Math.round(p.stop_loss).toLocaleString()}/${Math.round(p.take_profit).toLocaleString()}</td>
@@ -176,7 +185,7 @@ function positions(v){
     : "1トレード=資金100万円の1%リスクでサイジング(損切り幅から株数を算出・単元100株)。多数の建玉で投下資金が資金を超えるため、%(資金非依存)が実力値。";
   return `<section class="card"><h2>建玉一覧(新しい順)</h2>
     <div style="overflow-x:auto"><table>
-    <thead><tr><th>推奨日</th><th>銘柄</th><th>イン</th><th>損切/利確</th><th>株数</th><th>現在/決済</th><th>損益</th><th>率</th></tr></thead>
+    <thead><tr><th>推奨日</th><th style="text-align:left">地合い</th><th>銘柄</th><th>イン</th><th>損切/利確</th><th>株数</th><th>現在/決済</th><th>損益</th><th>率</th></tr></thead>
     <tbody>${rows}</tbody></table></div>
     <div class="muted" style="font-size:.75rem;margin-top:.5rem">保有中=含み損益(直近終値で評価)。決済=損切または利確に到達して確定。${note}</div>
   </section>`;

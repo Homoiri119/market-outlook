@@ -250,6 +250,7 @@ def track_portfolio(top: list[dict], date: str) -> None:
     portfolio.record_recommendations(pdata, top, date)
     portfolio.update_positions(pdata)
     summary = portfolio.summarize(pdata)
+    portfolio.attach_regime(summary["positions"], DOCS_DIR)  # tag recommendation-day 地合い
     summary["generated_at"] = _jst_now().strftime("%Y-%m-%d %H:%M JST")
     DOCS_DIR.mkdir(parents=True, exist_ok=True)
     # portfolio.json doubles as the page's data source AND the next run's saved state
