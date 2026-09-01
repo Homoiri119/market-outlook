@@ -1,0 +1,31 @@
+[
+  {"date": "2026-08-25", "code": "19250", "name": "大和ハウス工業", "entry": 4700, "stop_loss": 4598, "take_profit": 4869, "trail_stop": 4531},
+  {"date": "2026-08-25", "code": "45020", "name": "武田薬品工業", "entry": 5795, "stop_loss": 5625, "take_profit": 6080, "trail_stop": 5510},
+  {"date": "2026-08-25", "code": "45430", "name": "テルモ", "entry": 2596, "stop_loss": 2457, "take_profit": 2827, "trail_stop": 2364},
+  {"date": "2026-08-25", "code": "45680", "name": "第一三共", "entry": 2858, "stop_loss": 2733, "take_profit": 3066, "trail_stop": 2650},
+  {"date": "2026-08-25", "code": "50200", "name": "ＥＮＥＯＳホールディングス", "entry": 1340, "stop_loss": 1283, "take_profit": 1437, "trail_stop": 1244},
+
+  {"date": "2026-08-26", "code": "25030", "name": "キリンホールディングス", "entry": 3084, "stop_loss": 2958, "take_profit": 3293, "trail_stop": 2875},
+  {"date": "2026-08-26", "code": "87250", "name": "ＭＳ＆ＡＤインシュアランスグループHD", "entry": 5070, "stop_loss": 4886, "take_profit": 5380, "trail_stop": 4762},
+  {"date": "2026-08-26", "code": "19250", "name": "大和ハウス工業", "entry": 4709, "stop_loss": 4610, "take_profit": 4873, "trail_stop": 4545},
+  {"date": "2026-08-26", "code": "43070", "name": "野村総合研究所", "entry": 5115, "stop_loss": 4865, "take_profit": 5525, "trail_stop": 4700},
+  {"date": "2026-08-26", "code": "45430", "name": "テルモ", "entry": 2596, "stop_loss": 2458, "take_profit": 2827, "trail_stop": 2366},
+
+  {"date": "2026-08-28", "code": "86040", "name": "野村ホールディングス", "entry": 1612, "stop_loss": 1564, "take_profit": 1690, "trail_stop": 1533},
+  {"date": "2026-08-28", "code": "60980", "name": "リクルートホールディングス", "entry": 16970, "stop_loss": 15845, "take_profit": 18840, "trail_stop": 15100},
+  {"date": "2026-08-28", "code": "67580", "name": "ソニーグループ", "entry": 3870, "stop_loss": 3709, "take_profit": 4138, "trail_stop": 3602},
+  {"date": "2026-08-28", "code": "77510", "name": "キヤノン", "entry": 4689, "stop_loss": 4574, "take_profit": 4880, "trail_stop": 4498},
+  {"date": "2026-08-28", "code": "67620", "name": "ＴＤＫ", "entry": 3077, "stop_loss": 2921, "take_profit": 3337, "trail_stop": 2817},
+
+  {"date": "2026-08-29", "code": "86040", "name": "野村ホールディングス", "entry": 1642, "stop_loss": 1593, "take_profit": 1723, "trail_stop": 1561},
+  {"date": "2026-08-29", "code": "83080", "name": "りそなホールディングス", "entry": 2512, "stop_loss": 2404, "take_profit": 2694, "trail_stop": 2331},
+  {"date": "2026-08-29", "code": "83090", "name": "三井住友トラストグループ", "entry": 1790, "stop_loss": 1735, "take_profit": 1880, "trail_stop": 1699},
+  {"date": "2026-08-29", "code": "86970", "name": "日本取引所グループ", "entry": 2293, "stop_loss": 2230, "take_profit": 2398, "trail_stop": 2188},
+  {"date": "2026-08-29", "code": "87250", "name": "ＭＳ＆ＡＤインシュアランスグループHD", "entry": 5115, "stop_loss": 4932, "take_profit": 5420, "trail_stop": 4810},
+
+  {"date": "2026-08-31", "code": "50200", "name": "ＥＮＥＯＳホールディングス", "entry": 1339, "stop_loss": 1293, "take_profit": 1416, "trail_stop": 1262},
+  {"date": "2026-08-31", "code": "80530", "name": "住友商事", "entry": 1792, "stop_loss": 1724, "take_profit": 1905, "trail_stop": 1678},
+  {"date": "2026-08-31", "code": "80010", "name": "伊藤忠商事", "entry": 2108, "stop_loss": 2035, "take_profit": 2229, "trail_stop": 1987},
+  {"date": "2026-08-31", "code": "58030", "name": "フジクラ", "entry": 5505, "stop_loss": 4971, "take_profit": 6390, "trail_stop": 4616},
+  {"date": "2026-08-31", "code": "83090", "name": "三井住友トラストグループ", "entry": 1777, "stop_loss": 1722, "take_profit": 1869, "trail_stop": 1685}
+]

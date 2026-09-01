@@ -50,16 +50,26 @@ def main() -> int:
     recos = json.loads(SEED_FILE.read_text(encoding="utf-8"))
     recos.sort(key=lambda r: (r.get("date", ""), str(r.get("code"))))
 
+    # Group by date and replay day-by-day (record that day's picks, then re-price
+    # through that date). This mirrors the live morning flow exactly, so a name that
+    # is still open is not re-bought, and closes happen in chronological order.
+    by_date: dict[str, list[dict]] = {}
+    for r in recos:
+        by_date.setdefault(r["date"], []).append(r)
+
     pdata = portfolio.load(DOCS_DIR)
     added = 0
-    for r in recos:
-        if portfolio.open_position(
-            pdata, r["date"], str(r["code"]), r.get("name", ""),
-            r.get("entry"), r.get("stop_loss"), r.get("take_profit"), r.get("trail_stop"),
-        ):
-            added += 1
+    for d in sorted(by_date):
+        for r in by_date[d]:
+            if portfolio.open_position(
+                pdata, d, str(r["code"]), r.get("name", ""),
+                r.get("entry"), r.get("stop_loss"), r.get("take_profit"), r.get("trail_stop"),
+            ):
+                added += 1
+        portfolio.update_positions(pdata, today=dt.date.fromisoformat(d))
     logger.info("Seeded %d new positions (%d total)", added, len(pdata["positions"]))
 
+    # Final re-price to bring every still-open position up to today.
     portfolio.update_positions(pdata)
     summary = portfolio.summarize(pdata)
     summary["generated_at"] = _jst_now().strftime("%Y-%m-%d %H:%M JST")
