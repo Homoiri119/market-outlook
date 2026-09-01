@@ -56,28 +56,83 @@ function yen0(v){return v==null?"—":Math.round(v).toLocaleString()+"円";}
 function pct(v,d=1){return v==null?"—":(v*100>=0?"+":"")+(v*100).toFixed(d)+"%";}
 
 let DATA=null;
+const LS_MODE="pf_mode";
+const RISK_CAPITAL=1000000, RISK_PCT=0.01, LOT=100, ROUND=10000;
+function getMode(){ try{const m=localStorage.getItem(LS_MODE); if(m==="risk1"||m==="lot100") return m;}catch(e){} return "lot100"; }
+function setMode(m){ try{localStorage.setItem(LS_MODE,m);}catch(e){} }
 
-function kpis(){
-  const cap=DATA.initial_capital, eq=DATA.equity, dep=DATA.deployed;
-  const col=DATA.total_pnl>=0?"var(--up)":"var(--down)";
-  const depPct=cap? (dep/cap*100).toFixed(0):"—";
+function sharesFor(mode,p){
+  if(mode==="risk1"){
+    const raw=RISK_CAPITAL*RISK_PCT/(p.entry-p.stop_loss);
+    return Math.max(LOT, Math.floor(raw/LOT)*LOT);
+  }
+  return LOT;
+}
+function autoCapital(ps){
+  const dates=[...new Set(ps.flatMap(p=>[p.date,p.exit_date].filter(Boolean)))].sort();
+  let peak=0;
+  for(const d of dates){ let c=0; for(const p of ps){ const end=p.exit_date||"9999-12-31"; if(p.date<=d&&d<=end) c+=LOT*p.entry; } peak=Math.max(peak,c); }
+  return (Math.floor(peak/ROUND)+1)*ROUND;
+}
+function compute(mode){
+  const ps=DATA.positions||[];
+  const capital = mode==="risk1" ? RISK_CAPITAL : autoCapital(ps);
+  const today=(DATA.curve&&DATA.curve.length)?DATA.curve[DATA.curve.length-1].date:new Date().toISOString().slice(0,10);
+  const view=ps.map(p=>{ const sh=sharesFor(mode,p); const px=p.status==="open"?p.last_price:p.exit_price; const e=p.entry;
+    return Object.assign({},p,{shares:sh, pnl:(px-e)*sh, pnl_pct:e?px/e-1:0}); });
+  const open=view.filter(p=>p.status==="open"), closed=view.filter(p=>p.status==="closed");
+  const realized=closed.reduce((a,p)=>a+p.pnl,0), unreal=open.reduce((a,p)=>a+p.pnl,0);
+  const deployed=open.reduce((a,p)=>a+p.shares*p.entry,0), wins=closed.filter(p=>p.pnl>0);
+  let curve=[];
+  if(view.length){
+    const first=view.reduce((m,p)=>p.date<m?p.date:m, view[0].date);
+    curve.push({date:first, equity:Math.round(capital)});
+    let cum=0;
+    for(const p of closed.slice().sort((a,b)=>(a.exit_date||"").localeCompare(b.exit_date||""))){ cum+=p.pnl; curve.push({date:p.exit_date, equity:Math.round(capital+cum)}); }
+    curve.push({date:today, equity:Math.round(capital+realized+unreal)});
+  }
+  return {mode, capital, equity:Math.round(capital+realized+unreal), total_pnl:Math.round(realized+unreal),
+    total_pnl_pct: capital?(realized+unreal)/capital:0, realized:Math.round(realized), unrealized:Math.round(unreal),
+    deployed:Math.round(deployed), n_open:open.length, n_closed:closed.length,
+    win_rate: closed.length? wins.length/closed.length : null,
+    curve, positions: view.slice().sort((a,b)=>b.date.localeCompare(a.date))};
+}
+
+function toggle(mode){
+  const on="background:var(--accent);color:#052132;font-weight:700;";
+  const off="background:var(--panel-2);color:var(--text);";
+  const b=(m,l)=>`<button data-m="${m}" class="tg" style="border:none;padding:.42rem .9rem;cursor:pointer;font-size:.85rem;${mode===m?on:off}">${l}</button>`;
+  const note = mode==="lot100"
+    ? "全銘柄100株。運用資金は保有総額を自動設定 → 投下資金 ≤ 運用資金(実口座に一致)。"
+    : "1トレード=資金100万円の1%リスクでサイジング。投下資金は資金を超え得る/%が実力値。";
+  return `<section class="card"><div style="display:flex;align-items:center;gap:.7rem;flex-wrap:wrap">
+    <span style="font-size:.85rem;color:var(--muted)">表示モード</span>
+    <div style="display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden">${b("lot100","現物100株")}${b("risk1","リスク1%")}</div>
+    <span class="muted" style="font-size:.75rem">${note}</span>
+  </div></section>`;
+}
+
+function kpis(v){
+  const col=v.total_pnl>=0?"var(--up)":"var(--down)";
+  const depPct=v.capital? (v.deployed/v.capital*100).toFixed(0):"—";
+  const capSub = v.mode==="lot100" ? "全建玉を100株買える額(自動)" : "基準額(1%=1万円/件)";
   return `<div class="kpis">
-    <div class="kpi"><div class="k">運用資金</div><div class="v">${yen0(cap)}</div><div class="k">全建玉を100株買える額</div></div>
-    <div class="kpi"><div class="k">評価額</div><div class="v">${yen0(eq)}</div></div>
-    <div class="kpi"><div class="k">総損益(率)</div><div class="v" style="color:${col}">${pct(DATA.total_pnl_pct)}</div><div class="k" style="color:${col}">${yen(DATA.total_pnl)}</div></div>
-    <div class="kpi"><div class="k">確定 / 含み</div><div class="v" style="font-size:1rem">${yen(DATA.realized)}<br>${yen(DATA.unrealized)}</div></div>
-    <div class="kpi"><div class="k">投下資金(現建玉)</div><div class="v" style="font-size:1rem">${yen0(dep)}</div><div class="k">資金の${depPct}% ・ ${DATA.n_open}保有/${DATA.n_closed}決済・勝率${DATA.win_rate==null?"—":(DATA.win_rate*100).toFixed(0)+"%"}</div></div>
+    <div class="kpi"><div class="k">${v.mode==="lot100"?"運用資金":"資金(基準)"}</div><div class="v">${yen0(v.capital)}</div><div class="k">${capSub}</div></div>
+    <div class="kpi"><div class="k">評価額</div><div class="v">${yen0(v.equity)}</div></div>
+    <div class="kpi"><div class="k">総損益(率)</div><div class="v" style="color:${col}">${pct(v.total_pnl_pct)}</div><div class="k" style="color:${col}">${yen(v.total_pnl)}</div></div>
+    <div class="kpi"><div class="k">確定 / 含み</div><div class="v" style="font-size:1rem">${yen(v.realized)}<br>${yen(v.unrealized)}</div></div>
+    <div class="kpi"><div class="k">投下資金(現建玉)</div><div class="v" style="font-size:1rem">${yen0(v.deployed)}</div><div class="k">資金の${depPct}% ・ ${v.n_open}保有/${v.n_closed}決済・勝率${v.win_rate==null?"—":(v.win_rate*100).toFixed(0)+"%"}</div></div>
   </div>`;
 }
 
-function equity(){
-  const pts=DATA.curve||[]; const base=DATA.initial_capital;
+function equity(v){
+  const pts=v.curve||[]; const base=v.capital;
   if(pts.length<2) return `<section class="card"><h2>評価額の推移</h2><div class="muted">まだ推移を描くデータがありません(数日の運用後に表示)。</div></section>`;
   const W=960,H=300,padL=84,padR=20,padT=14,padB=24;
   let vals=pts.map(p=>p.equity); vals.push(base);
   let min=Math.min(...vals),max=Math.max(...vals);const pad=(max-min)*0.08||1;min-=pad;max+=pad;
   const x=i=>padL+(i*(W-padL-padR))/(pts.length-1);
-  const y=v=>padT+(H-padT-padB)*(1-(v-min)/(max-min));
+  const y=val=>padT+(H-padT-padB)*(1-(val-min)/(max-min));
   const line=pts.map((p,i)=>`${x(i)},${y(p.equity)}`).join(" ");
   const baseY=y(base), last=pts[pts.length-1].equity, lastPct=base?(last-base)/base:0;
   const col=last>=base?"var(--up)":"var(--down)";
@@ -90,15 +145,15 @@ function equity(){
       <line x1="${padL}" y1="${baseY}" x2="${W-padR}" y2="${baseY}" stroke="var(--muted)" stroke-dasharray="4 4" opacity=".5"/>
       <polyline points="${line}" fill="none" stroke="${col}" stroke-width="2"/>
       <text class="glabel" x="4" y="${y(max)+4}">${Math.round(max).toLocaleString()}</text>
-      <text class="glabel" x="4" y="${baseY+4}">運用資金 ${Math.round(base).toLocaleString()}</text>
+      <text class="glabel" x="4" y="${baseY+4}">${v.mode==="lot100"?"運用資金":"基準"} ${Math.round(base).toLocaleString()}</text>
       <text class="glabel" x="4" y="${y(min)+4}">${Math.round(min).toLocaleString()}</text>
     </svg>
-    <div class="muted" style="font-size:.75rem;margin-top:.3rem">運用資金からの評価額。確定損益で階段状に動き、右端は含み損益も反映した現在値。</div>
+    <div class="muted" style="font-size:.75rem;margin-top:.3rem">基準額からの評価額。確定損益で階段状に動き、右端は含み損益も反映した現在値。</div>
   </section>`;
 }
 
-function positions(){
-  const ps=DATA.positions||[];
+function positions(v){
+  const ps=v.positions||[];
   if(!ps.length) return `<section class="card"><h2>建玉一覧</h2><div class="muted">まだ推奨から記録された建玉がありません。</div></section>`;
   const rows=ps.map(p=>{
     const badge = p.status==="open" ? `<span class="badge b-open">保有中</span>`
@@ -116,25 +171,32 @@ function positions(){
       <td class="${cls}">${pct(p.pnl_pct)}</td>
     </tr>`;
   }).join("");
+  const note = v.mode==="lot100"
+    ? "全銘柄を各100株で記録。運用資金は「全建玉を100株買える額(1万円単位で切上げ)」を自動設定するため、投下資金は常に運用資金以内。"
+    : "1トレード=資金100万円の1%リスクでサイジング(損切り幅から株数を算出・単元100株)。多数の建玉で投下資金が資金を超えるため、%(資金非依存)が実力値。";
   return `<section class="card"><h2>建玉一覧(新しい順)</h2>
     <div style="overflow-x:auto"><table>
     <thead><tr><th>推奨日</th><th>銘柄</th><th>イン</th><th>損切/利確</th><th>株数</th><th>現在/決済</th><th>損益</th><th>率</th></tr></thead>
     <tbody>${rows}</tbody></table></div>
-    <div class="muted" style="font-size:.75rem;margin-top:.5rem">保有中=含み損益(直近終値で評価)。決済=損切または利確に到達して確定。買い候補に挙がった全銘柄を各100株で記録。運用資金は「全建玉を100株買える額(1万円単位で切上げ)」を自動設定するため、投下資金は常に運用資金以内です。</div>
+    <div class="muted" style="font-size:.75rem;margin-top:.5rem">保有中=含み損益(直近終値で評価)。決済=損切または利確に到達して確定。${note}</div>
   </section>`;
 }
 
 function render(){
+  const mode=getMode(), v=compute(mode);
   document.getElementById("sub").textContent =
-    `Discordの買い候補を自動記録・追跡 ・ 運用資金 ${yen0(DATA.initial_capital)}(自動)・ 各銘柄100株 ・ 生成 ${DATA.generated_at||""}`;
+    `Discordの買い候補を自動記録・追跡 ・ ${mode==="lot100"?"現物100株":"リスク1%"}モード ・ 生成 ${DATA.generated_at||""}`;
   document.getElementById("content").innerHTML =
-    `<section class="card">${kpis()}</section>` +
-    equity() + positions() +
+    toggle(mode) +
+    `<section class="card">${kpis(v)}</section>` +
+    equity(v) + positions(v) +
     `<section class="card"><div class="disc">
-      毎朝Discordに出す買い候補を、推奨価格で各100株買ったと仮定して記録し、その後のJ-Quants日足で損切・利確の到達を判定します。
-      運用資金は<b>保有中の全銘柄を100株買える額(1万円単位で切上げ)</b>を自動設定するので、<b>投下資金は常に運用資金以内</b>になり実口座感覚に一致します。
-      エントリーは推奨価格(前日終値ベース)・手数料/スリッページ未考慮。あくまで「推奨に従っていたら」を可視化するペーパー運用です。<b>投資助言ではありません。</b>
+      毎朝Discordに出す買い候補を、推奨価格でエントリーしたと仮定して記録し、その後のJ-Quants日足で損切・利確の到達を判定します。
+      <b>現物100株</b>=全銘柄100株固定、運用資金は保有総額を自動設定(投下資金≤運用資金・実口座感覚)。
+      <b>リスク1%</b>=1トレードを資金100万円の1%リスクで建てる戦略トラッカー(投下資金は資金を超え得る/%が実力値)。
+      エントリーは推奨価格(前日終値ベース)・手数料/スリッページ未考慮。<b>投資助言ではありません。</b>
     </div></section>`;
+  document.querySelectorAll(".tg").forEach(b=>b.onclick=()=>{ setMode(b.dataset.m); render(); });
 }
 
 function boot(d){ DATA=d; render(); }
