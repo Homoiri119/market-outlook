@@ -68,5 +68,12 @@
 "expected_move": -0.016958688226979733,
 "actual_move": -0.00643113448077487,
 "hit": true
+},
+{
+"date": "2026-09-02",
+"direction": "STRONG_DOWN",
+"expected_move": -0.015251291158022835,
+"actual_move": null,
+"hit": null
 }
 ]
