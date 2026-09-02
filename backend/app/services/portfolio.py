@@ -83,6 +83,9 @@ def open_position(data: dict, date: str, code: str, name: str, entry: float,
         "entry": entry, "stop_loss": sl, "take_profit": tp, "trail_stop": trail,
         "shares": LOT, "status": "open", "exit_date": None, "exit_price": None,
         "reason": None, "last_price": entry, "pnl": 0.0, "pnl_pct": 0.0,
+        # Trailing-exit method (simulated in parallel with the fixed-TP method).
+        "trail_status": "open", "trail_exit_date": None, "trail_exit_price": None,
+        "trail_reason": None, "trail_cur_stop": None,
     })
     return True
 
@@ -115,10 +118,16 @@ def _auto_capital(positions: list[dict]) -> int:
 
 
 def update_positions(data: dict, today: dt.date | None = None) -> None:
-    """Re-price open positions against bars since their recommendation date."""
+    """Re-price positions against bars since their recommendation date, simulating BOTH
+    exit methods in parallel: fixed (SL / +TP) and trailing (SL that ratchets up with the
+    high by the trail distance, no fixed TP). Each is stored under its own fields."""
     today = today or dt.date.today()
     for p in data["positions"]:
-        if p["status"] != "open":
+        p.setdefault("trail_status", "open")
+        p.setdefault("trail_cur_stop", None)
+        fixed_open = p["status"] == "open"
+        trail_open = p.get("trail_status", "open") == "open"
+        if not fixed_open and not trail_open:
             continue
         try:
             start = dt.date.fromisoformat(p["date"])
@@ -132,22 +141,39 @@ def update_positions(data: dict, today: dt.date | None = None) -> None:
         if bars.empty:
             continue
         p["shares"] = LOT  # normalize (fixed 100-share lot)
-        entry, sl, tp, sh = p["entry"], p["stop_loss"], p["take_profit"], LOT
-        exited = False
+        entry, sl, tp = p["entry"], p["stop_loss"], p["take_profit"]
+        # Trail distance = entry - trail_stop (= TRAIL_ATR*ATR); fall back to the SL width.
+        trail_dist = (entry - p["trail_stop"]) if p.get("trail_stop") else (entry - sl)
+        cur_stop = sl
+        hh = None
+        last_close = p.get("last_price", entry)
         for d, row in bars.iterrows():
             hi, lo, cl = row.get("high"), row.get("low"), row.get("close")
             dd = d.isoformat() if hasattr(d, "isoformat") else str(d)
-            # Stop-loss checked first (conservative), then take-profit.
-            if lo is not None and sl is not None and lo <= sl:
-                p.update(status="closed", exit_date=dd, exit_price=sl, reason="損切")
-                exited = True; break
-            if hi is not None and tp is not None and hi >= tp:
-                p.update(status="closed", exit_date=dd, exit_price=tp, reason="利確")
-                exited = True; break
+            hh = hi if hh is None else (max(hh, hi) if hi is not None else hh)
+            # Fixed method: SL first (conservative), then +TP.
+            if fixed_open:
+                if lo is not None and lo <= sl:
+                    p.update(status="closed", exit_date=dd, exit_price=sl, reason="損切"); fixed_open = False
+                elif hi is not None and hi >= tp:
+                    p.update(status="closed", exit_date=dd, exit_price=tp, reason="利確"); fixed_open = False
+            # Trailing method: ratchet the stop up with the high; no fixed TP.
+            if trail_open:
+                if hh is not None:
+                    cur_stop = max(cur_stop, hh - trail_dist)
+                if lo is not None and lo <= cur_stop:
+                    reason = "トレール" if cur_stop > entry else "損切"
+                    p.update(trail_status="closed", trail_exit_date=dd,
+                             trail_exit_price=round(cur_stop), trail_reason=reason); trail_open = False
             if cl is not None:
-                p["last_price"] = float(cl)
-        px = p["exit_price"] if exited else p.get("last_price", entry)
-        p["pnl"] = float((px - entry) * sh)
+                last_close = float(cl)
+            if not fixed_open and not trail_open:
+                break
+        p["last_price"] = last_close
+        p["trail_cur_stop"] = round(cur_stop)
+        # Store the fixed-method P/L for compatibility (the page recomputes per view).
+        px = p["exit_price"] if p["status"] == "closed" else last_close
+        p["pnl"] = float((px - entry) * LOT)
         p["pnl_pct"] = float(px / entry - 1) if entry else 0.0
 
 
