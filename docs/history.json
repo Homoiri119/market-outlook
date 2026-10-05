@@ -222,5 +222,12 @@
 "expected_move": 0.0028758434561371926,
 "actual_move": 0.023365622420848275,
 "hit": true
+},
+{
+"date": "2026-10-05",
+"direction": "STRONG_UP",
+"expected_move": 0.016926063786809508,
+"actual_move": null,
+"hit": null
 }
 ]
