@@ -250,5 +250,12 @@
 "expected_move": 0.0018665772185188277,
 "actual_move": -0.011931076582177118,
 "hit": false
+},
+{
+"date": "2026-10-09",
+"direction": "FLAT",
+"expected_move": 0.00032387576202222207,
+"actual_move": -0.01980719434315373,
+"hit": false
 }
 ]
