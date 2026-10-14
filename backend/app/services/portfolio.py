@@ -1,17 +1,21 @@
 """Paper-trading tracker for the daily Discord buy candidates.
 
-Each morning the outlook job proposes buy candidates (entry / stop-loss / take-profit).
-This module records them as simulated positions, then re-prices open positions against
-subsequent J-Quants bars: a position closes at the stop-loss (損切) or take-profit (利確)
-if the day's range reaches it, otherwise it is marked-to-market at the latest close.
+Each morning the outlook job proposes buy candidates. This module records them as
+simulated positions and, on every run, re-simulates every position from scratch
+against J-Quants bars (idempotent, so rule changes apply to past positions too):
 
-Sizing: a fixed 100 shares (one Japanese round lot) per position. The reference capital
-(運用資金) is auto-derived so it just exceeds the peak simultaneous cost of holding 100
-shares of everything (rounded up to ¥10,000) — this keeps 投下資金 ≤ 運用資金 while never
-dropping a candidate for lack of cash.
+  * Entry at the recommendation day's OPEN; stop/target re-anchored to it
+    (stop = open - 1.5×ATR, target = open + 2.5×ATR, ATR taken from the recommendation).
+  * Three exit methods in parallel:
+      fixed  — stop / target, no time limit
+      trail  — stop that ratchets up with the high (trail width from the recommendation), no target
+      fixed5 — stop / target, and at the latest the close EXIT_MAX_HOLD bars after entry (推奨)
+  * Realistic gap fills: if the open is already beyond a level, fill at the open.
+  * Share splits: J-Quants back-adjusts prices; if the prior close no longer matches the
+    recommended price, the bars are rescaled to the recommendation's price basis.
 
-The result feeds docs/portfolio.json and the 実績 dashboard page. Entry assumed at the
-recommended price; fees/slippage ignored. Not investment advice.
+Sizing: a fixed 100 shares per position; the page derives other sizings. Fees and
+slippage are ignored. Not investment advice.
 """
 
 from __future__ import annotations
@@ -29,6 +33,9 @@ logger = logging.getLogger(__name__)
 RISK_PCT = 0.01       # informational only (sizing is a fixed 100-share lot)
 LOT = 100             # Japanese round lot; every position = 1 lot
 CAPITAL_ROUND = 10_000  # 運用資金 is rounded up to this unit
+SL_ATR, TP_ATR = 1.5, 2.5
+EXIT_MAX_HOLD = 5     # 推奨ルール: exit at the close 5 bars after the entry day at the latest
+SPLIT_TH = 0.20       # prior close vs recommended price beyond this = share split
 
 
 def load(docs_dir: Path) -> dict:
@@ -74,18 +81,22 @@ def open_position(data: dict, date: str, code: str, name: str, entry: float,
     pos_id = f"{code}-{date}"
     if any(p["id"] == pos_id for p in data["positions"]):
         return False
-    if any(p["code"] == code and p["status"] == "open" for p in data["positions"]):
+    # "Still held" follows the recommended rule (fixed5), so a name can be re-bought
+    # once its 5-day position has been closed.
+    if any(p["code"] == code and p.get("f5_status", p["status"]) == "open" for p in data["positions"]):
         return False
     if not entry or not tp or not sl or entry <= sl:
         return False
     data["positions"].append({
         "id": pos_id, "code": code, "name": name or code, "date": date,
+        "rec_entry": entry, "rec_stop_loss": sl, "rec_take_profit": tp,
         "entry": entry, "stop_loss": sl, "take_profit": tp, "trail_stop": trail,
+        "filled": False, "split_adj": None,
         "shares": LOT, "status": "open", "exit_date": None, "exit_price": None,
         "reason": None, "last_price": entry, "pnl": 0.0, "pnl_pct": 0.0,
-        # Trailing-exit method (simulated in parallel with the fixed-TP method).
         "trail_status": "open", "trail_exit_date": None, "trail_exit_price": None,
         "trail_reason": None, "trail_cur_stop": None,
+        "f5_status": "open", "f5_exit_date": None, "f5_exit_price": None, "f5_reason": None,
     })
     return True
 
@@ -117,64 +128,106 @@ def _auto_capital(positions: list[dict]) -> int:
     return int(math.floor(peak / CAPITAL_ROUND) + 1) * CAPITAL_ROUND
 
 
-def update_positions(data: dict, today: dt.date | None = None) -> None:
-    """Re-price positions against bars since their recommendation date, simulating BOTH
-    exit methods in parallel: fixed (SL / +TP) and trailing (SL that ratchets up with the
-    high by the trail distance, no fixed TP). Each is stored under its own fields."""
-    today = today or dt.date.today()
-    for p in data["positions"]:
-        p.setdefault("trail_status", "open")
-        p.setdefault("trail_cur_stop", None)
-        fixed_open = p["status"] == "open"
-        trail_open = p.get("trail_status", "open") == "open"
-        if not fixed_open and not trail_open:
-            continue
+def _bars_by_code(positions: list[dict], today: dt.date) -> dict:
+    """One J-Quants fetch per code, from a little before its earliest recommendation
+    (the prior close is needed for the split check) up to `today`."""
+    first: dict[str, dt.date] = {}
+    for p in positions:
+        d = dt.date.fromisoformat(p["date"])
+        first[p["code"]] = min(first.get(p["code"], d), d)
+    out = {}
+    for code, d0 in first.items():
         try:
-            start = dt.date.fromisoformat(p["date"])
-        except ValueError:
-            continue
-        try:
-            bars = jquants_client.fetch_daily_quotes(p["code"], start, today)
+            out[code] = jquants_client.fetch_daily_quotes(code, d0 - dt.timedelta(days=14), today)
         except Exception:
-            logger.exception("bars failed for %s", p["code"])
+            logger.exception("bars failed for %s", code)
+    return out
+
+
+def _resimulate(p: dict, bars) -> None:
+    """Re-run all three exit methods for one position from its recommendation day."""
+    rec_e, rec_sl = p["rec_entry"], p["rec_stop_loss"]
+    atr = (rec_e - rec_sl) / SL_ATR
+    trail_dist = (rec_e - p["trail_stop"]) if p.get("trail_stop") else TP_ATR * atr
+    d0 = dt.date.fromisoformat(p["date"])
+    prev, seg = bars[bars.index < d0], bars[bars.index >= d0]
+
+    # Share split: the back-adjusted prior close no longer matches the recommended price.
+    scale = 1.0
+    if not prev.empty:
+        ratio = float(prev["close"].iloc[-1]) / rec_e
+        if abs(ratio - 1) > SPLIT_TH:
+            scale = 1 / ratio
+
+    # Reset to "recommended, not yet traded", then replay.
+    p.update(entry=rec_e, stop_loss=rec_sl, take_profit=p["rec_take_profit"], last_price=rec_e,
+             filled=False, split_adj=round(1 / scale, 4) if scale != 1.0 else None, shares=LOT,
+             status="open", exit_date=None, exit_price=None, reason=None,
+             trail_status="open", trail_exit_date=None, trail_exit_price=None, trail_reason=None,
+             f5_status="open", f5_exit_date=None, f5_exit_price=None, f5_reason=None,
+             pnl=0.0, pnl_pct=0.0)
+    if seg.empty:
+        return  # the recommendation day has not traded yet
+
+    E = float(seg["open"].iloc[0]) * scale  # buy at the recommendation day's open
+    sl, tp = E - SL_ATR * atr, E + TP_ATR * atr
+    p.update(entry=round(E, 1), stop_loss=round(sl, 1), take_profit=round(tp, 1), filled=True)
+
+    fixed_open = trail_open = f5_open = True
+    t_stop, hh, last = sl, E, E
+    for i, (d, row) in enumerate(seg.iterrows()):
+        op, hi, lo, cl = (float(row[k]) * scale for k in ("open", "high", "low", "close"))
+        dd = d.isoformat() if hasattr(d, "isoformat") else str(d)
+        gap = i > 0  # the entry bar's open IS the entry, so no gap fill on it
+        if fixed_open or f5_open:
+            px = why = None
+            if lo <= sl:  # stop first (conservative)
+                px, why = (op if gap and op < sl else sl), "損切"
+            elif hi >= tp:
+                px, why = (op if gap and op > tp else tp), "利確"
+            if px is not None:
+                if fixed_open:
+                    p.update(status="closed", exit_date=dd, exit_price=round(px, 1), reason=why)
+                    fixed_open = False
+                if f5_open:
+                    p.update(f5_status="closed", f5_exit_date=dd, f5_exit_price=round(px, 1), f5_reason=why)
+                    f5_open = False
+        if f5_open and i >= EXIT_MAX_HOLD:
+            p.update(f5_status="closed", f5_exit_date=dd, f5_exit_price=round(cl, 1), f5_reason="期限")
+            f5_open = False
+        if trail_open and lo <= t_stop:
+            px = op if gap and op < t_stop else t_stop
+            p.update(trail_status="closed", trail_exit_date=dd, trail_exit_price=round(px, 1),
+                     trail_reason="トレール" if px > E else "損切")
+            trail_open = False
+        hh = max(hh, hi)
+        t_stop = max(t_stop, hh - trail_dist)  # effective from the next bar (conservative)
+        last = cl
+        if not (fixed_open or trail_open or f5_open):
+            break
+    p["last_price"] = round(last, 1)
+    p["trail_cur_stop"] = round(t_stop)
+    px = p["exit_price"] if p["status"] == "closed" else last
+    p["pnl"] = float((px - E) * LOT)
+    p["pnl_pct"] = float(px / E - 1)
+
+
+def update_positions(data: dict, today: dt.date | None = None) -> None:
+    """Re-simulate every position from scratch (open-anchored entry, split-safe,
+    fixed / trail / fixed5 exits). Positions whose bars cannot be fetched keep their
+    previous state."""
+    today = today or dt.date.today()
+    positions = data["positions"]
+    for p in positions:  # keep the original (pre-open) recommendation levels
+        p.setdefault("rec_entry", p["entry"])
+        p.setdefault("rec_stop_loss", p["stop_loss"])
+        p.setdefault("rec_take_profit", p["take_profit"])
+    bars_by_code = _bars_by_code(positions, today)
+    for p in positions:
+        bars = bars_by_code.get(p["code"])
+        if bars is None or bars.empty:
             continue
-        if bars.empty:
-            continue
-        p["shares"] = LOT  # normalize (fixed 100-share lot)
-        entry, sl, tp = p["entry"], p["stop_loss"], p["take_profit"]
-        # Trail distance = entry - trail_stop (= TRAIL_ATR*ATR); fall back to the SL width.
-        trail_dist = (entry - p["trail_stop"]) if p.get("trail_stop") else (entry - sl)
-        cur_stop = sl
-        hh = None
-        last_close = p.get("last_price", entry)
-        for d, row in bars.iterrows():
-            hi, lo, cl = row.get("high"), row.get("low"), row.get("close")
-            dd = d.isoformat() if hasattr(d, "isoformat") else str(d)
-            hh = hi if hh is None else (max(hh, hi) if hi is not None else hh)
-            # Fixed method: SL first (conservative), then +TP.
-            if fixed_open:
-                if lo is not None and lo <= sl:
-                    p.update(status="closed", exit_date=dd, exit_price=sl, reason="損切"); fixed_open = False
-                elif hi is not None and hi >= tp:
-                    p.update(status="closed", exit_date=dd, exit_price=tp, reason="利確"); fixed_open = False
-            # Trailing method: ratchet the stop up with the high; no fixed TP.
-            if trail_open:
-                if hh is not None:
-                    cur_stop = max(cur_stop, hh - trail_dist)
-                if lo is not None and lo <= cur_stop:
-                    reason = "トレール" if cur_stop > entry else "損切"
-                    p.update(trail_status="closed", trail_exit_date=dd,
-                             trail_exit_price=round(cur_stop), trail_reason=reason); trail_open = False
-            if cl is not None:
-                last_close = float(cl)
-            if not fixed_open and not trail_open:
-                break
-        p["last_price"] = last_close
-        p["trail_cur_stop"] = round(cur_stop)
-        # Store the fixed-method P/L for compatibility (the page recomputes per view).
-        px = p["exit_price"] if p["status"] == "closed" else last_close
-        p["pnl"] = float((px - entry) * LOT)
-        p["pnl_pct"] = float(px / entry - 1) if entry else 0.0
+        _resimulate(p, bars[bars.index <= today])
 
 
 def summarize(data: dict) -> dict:

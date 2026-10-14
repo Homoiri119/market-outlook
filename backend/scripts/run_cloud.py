@@ -91,19 +91,42 @@ def _yen(v) -> str:
     return "—" if v is None else f"{v:,}"
 
 
-def rank_candidates(outlook: dict, limit: int = 5, pool: int = 10) -> list[dict]:
+DOWN_DAYS = ("DOWN", "STRONG_DOWN")
+
+
+def _fresh_stocks(payload: dict, outlook: dict) -> tuple[list[dict], str | None]:
+    """Drop stocks whose analysis is stale (so we never recommend at an old price).
+    The analysis must be from today, and each stock's latest bar must be the last
+    Tokyo session (outlook['nikkei_prev_date'])."""
+    stocks = payload.get("stocks", [])
+    gen = (payload.get("generated_at") or "")[:10]
+    if gen and gen != _jst_now().date().isoformat():
+        return [], f"⚠️ 個別分析が本日更新されていません(最終 {gen})。古い価格での推奨を避けるため候補なし。"
+    expected = outlook.get("nikkei_prev_date")
+    if not expected:
+        return stocks, None
+    fresh = [s for s in stocks if not s.get("data_date") or s["data_date"] >= expected]
+    if not fresh:
+        latest = max((s.get("data_date") or "") for s in stocks) if stocks else "—"
+        return [], f"⚠️ 株価データが前営業日({expected})に未更新(最終 {latest})のため候補なし。"
+    stale = len(stocks) - len(fresh)
+    return fresh, (f"(株価が未更新の{stale}銘柄は除外)" if stale else None)
+
+
+def rank_candidates(outlook: dict, limit: int = 5, pool: int = 10) -> tuple[list[dict], str | None]:
     """Rank buy candidates by signal × sector-tailwind × regime × per-stock news,
-    excluding those with a serious negative headline. Returns the structured top list
-    (reused for both the Discord message and the paper-portfolio tracker)."""
+    excluding stale data and serious negative headlines. Returns (top list, note);
+    the list is reused for both the Discord message and the paper-portfolio tracker."""
     f = DOCS_DIR / "analysis.json"
     if not f.exists():
-        return []
+        return [], None
     try:
-        stocks = json.loads(f.read_text(encoding="utf-8")).get("stocks", [])
+        payload = json.loads(f.read_text(encoding="utf-8"))
     except (ValueError, OSError):
-        return []
+        return [], None
+    stocks, note = _fresh_stocks(payload, outlook)
     if not stocks:
-        return []
+        return [], note
 
     us = outlook.get("us_market")
     d = outlook.get("direction", "")
@@ -127,20 +150,25 @@ def rank_candidates(outlook: dict, limit: int = 5, pool: int = 10) -> list[dict]
         scored.append(s)
         time.sleep(0.3)
     scored.sort(key=lambda x: x["_final"], reverse=True)
-    return scored[:limit]
+    return scored[:limit], note
 
 
-def selection_section(outlook: dict, top: list[dict] | None = None, limit: int = 5, pool: int = 10) -> str:
-    """Format the ranked buy candidates (with entry/SL/TP/trail) for Discord."""
+def selection_section(outlook: dict, top: list[dict] | None = None, note: str | None = None,
+                      limit: int = 5, pool: int = 10) -> str:
+    """Format the ranked buy candidates for Discord under the review's rule:
+    buy at the open, stop/target as offsets from the open, exit within 5 sessions."""
     if top is None:
-        top = rank_candidates(outlook, limit, pool)
+        top, note = rank_candidates(outlook, limit, pool)
 
     lines = ["", "━━━━━━━━━━━",
              "🎯 **今日の買い候補**",
              "└ シグナル×追い風×地合い×ニュース",
-             "└ 損切=撤退 / 利確=固定の目標",
-             "└ 🔻トレール=利確せず伸ばす別戦略(高値から一定幅で損切りを切り上げ)",
+             "└ ルール: 寄りで買い/損切・利確は寄り値から/最長5営業日",
              "━━━━━━━━━━━"]
+    if outlook.get("direction") in DOWN_DAYS:
+        lines.append("⚠️ **本日は下落予想 → 新規は見送り推奨**(以下は参考)")
+    if note:
+        lines.append(note)
     if not top:
         lines.append("該当なし(様子見)。")
         return "\n".join(lines)
@@ -151,16 +179,16 @@ def selection_section(outlook: dict, top: list[dict] | None = None, limit: int =
         newstag = "  🟢好材料" if sent == "good" else ("  🔴悪材料" if sent == "bad" else "")
         rr = f" ・ R:R 1:{s['risk_reward']}" if s.get("risk_reward") else ""
         tw = s["sel_comp"]["sector_tw"] * 100
-        cp, ts = s.get("current_price"), s.get("trail_stop")
+        cp, sl, tp = s.get("current_price"), s.get("stop_loss"), s.get("take_profit")
         lines.append("")
         lines.append(f"{num} **{s['name']}**({s['code']}){newstag}")
-        lines.append(f"　🟢買 {_yen(cp)} → 🎯利確 {_yen(s.get('take_profit'))}")
-        lines.append(f"　✂️損切 {_yen(s.get('stop_loss'))}{rr}")
-        if cp and ts:  # トレールは「幅」で表示(絶対価格だと損切りと紛らわしいため)
-            lines.append(f"　🔻伸ばす場合: 利確せず高値−{_yen(round(cp - ts))}でトレール")
+        lines.append(f"　🟢寄りで買い(前日終値 {_yen(cp)})")
+        if cp and sl and tp:  # offsets from the open (= 1.5×ATR / 2.5×ATR)
+            lines.append(f"　✂️損切 寄り値−{round(cp - sl):,} ・ 🎯利確 寄り値+{round(tp - cp):,}")
+        lines.append(f"　⏱5営業日後の引けで手仕舞い{rr}")
         lines.append(f"　📊 シグナル{s['sel_comp']['tech']:.0f} ・ 追い風{tw:+.1f}%")
     lines.append("")
-    lines.append("→ 地合いが弱い日はサイズ縮小か見送り。参考情報です。")
+    lines.append("→ 寄りで約定したら、その値から損切(逆指値)・利確(指値)を入れる。参考情報です。")
     return "\n".join(lines)
 
 
@@ -279,10 +307,10 @@ def main() -> int:
     dashboard_url = os.environ.get("DASHBOARD_URL") or "https://homoiri119.github.io/market-outlook/"
     footer = (f"\n\n━━━━━━━━━━━\n🔗 **ダッシュボード**: {dashboard_url}\n"
               "└ アウトルック / 個別銘柄 / ニュース / 💼実績\n└ 戦略検証 / バックテスト / セクター / 🆕IPO")
-    top = rank_candidates(outlook)
+    top, note = rank_candidates(outlook)
     # URL at the top too, so it is always in the first message even if Discord splits it.
     message = (f"🔗 {dashboard_url}\n"
-               + format_brief(outlook, accuracy) + selection_section(outlook, top=top) + footer)
+               + format_brief(outlook, accuracy) + selection_section(outlook, top=top, note=note) + footer)
     sent = send_discord_message(message)
     logger.info("Discord notification sent: %s", sent)
 

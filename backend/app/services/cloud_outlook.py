@@ -134,6 +134,8 @@ def compute_stateless_outlook(date: dt.date | None = None) -> dict:
         "implied_gap": implied_gap,
         "model_return": model_return,
         "nikkei_prev_close": nikkei_prev_close,
+        # Last Tokyo session date — used to check that per-stock analysis data is fresh.
+        "nikkei_prev_date": nikkei_prev["date"].isoformat() if nikkei_prev and nikkei_prev.get("date") else None,
         "nikkei_futures": nikkei_futures,
         "implied_open_level": implied_open_level,
         "futures_source": futures_source,

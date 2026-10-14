@@ -106,6 +106,8 @@ def main() -> int:
             logger.exception("analyze failed for %s", code)
             res = None
         if res:
+            last = bars.index[-1]
+            res["data_date"] = last.isoformat() if hasattr(last, "isoformat") else str(last)  # freshness check
             results.append(res)
         if (i + 1) % 20 == 0:
             logger.info("  analyzed %d/%d", i + 1, len(codes))
@@ -118,6 +120,7 @@ def main() -> int:
     payload = {
         "generated_at": dt.datetime.now(dt.timezone(dt.timedelta(hours=9))).strftime("%Y-%m-%d %H:%M JST"),
         "count": len(results),
+        "data_date": max((r["data_date"] for r in results), default=None),
         "fundamentals_available": has_fund > 0,
         "stocks": results,
     }
