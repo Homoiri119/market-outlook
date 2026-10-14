@@ -25,9 +25,26 @@ def send_discord_message(content: str) -> bool:
         )
         return False
 
-    # Discord message content is limited to 2000 characters per message.
-    chunks = [content[i : i + 1900] for i in range(0, len(content), 1900)] or [""]
-    for chunk in chunks:
+    # Discord caps content at 2000 chars/message. Split on line boundaries so links
+    # and the footer stay intact instead of being cut mid-line.
+    for chunk in _split_on_lines(content, 1900):
         resp = httpx.post(webhook, json={"content": chunk}, timeout=15)
         resp.raise_for_status()
     return True
+
+
+def _split_on_lines(content: str, limit: int) -> list[str]:
+    chunks: list[str] = []
+    cur = ""
+    for line in content.split("\n"):
+        while len(line) > limit:  # a single over-long line: hard-split it
+            if cur:
+                chunks.append(cur); cur = ""
+            chunks.append(line[:limit]); line = line[limit:]
+        if cur and len(cur) + 1 + len(line) > limit:
+            chunks.append(cur); cur = line
+        else:
+            cur = line if not cur else cur + "\n" + line
+    if cur:
+        chunks.append(cur)
+    return chunks or [""]

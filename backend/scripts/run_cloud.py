@@ -274,11 +274,15 @@ def main() -> int:
         logger.info("Accuracy (last %d): hit-rate %.0f%%, MAE %.2f%%",
                     accuracy["n"], accuracy["hit_rate"] * 100, accuracy["mae"] * 100)
 
-    dashboard_url = os.environ.get("DASHBOARD_URL", "https://homoiri119.github.io/market-outlook/")
-    footer = (f"\n\n━━━━━━━━━━━\n🔗 **ダッシュボード**\n{dashboard_url}\n"
+    # `or` (not get's default): an unset GitHub secret is passed as an EMPTY string,
+    # which would otherwise blank the URL.
+    dashboard_url = os.environ.get("DASHBOARD_URL") or "https://homoiri119.github.io/market-outlook/"
+    footer = (f"\n\n━━━━━━━━━━━\n🔗 **ダッシュボード**: {dashboard_url}\n"
               "└ アウトルック / 個別銘柄 / ニュース / 💼実績\n└ 戦略検証 / バックテスト / セクター / 🆕IPO")
     top = rank_candidates(outlook)
-    message = format_brief(outlook, accuracy) + selection_section(outlook, top=top) + footer
+    # URL at the top too, so it is always in the first message even if Discord splits it.
+    message = (f"🔗 {dashboard_url}\n"
+               + format_brief(outlook, accuracy) + selection_section(outlook, top=top) + footer)
     sent = send_discord_message(message)
     logger.info("Discord notification sent: %s", sent)
 
