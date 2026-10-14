@@ -10,14 +10,23 @@ name: Morning Routine
 # さらに分単位の正確さが必要なら、外部cron(cron-job.org 等)から下記APIを叩いて起動:
 #   POST https://api.github.com/repos/<owner>/<repo>/actions/workflows/morning-routine.yml/dispatches
 #   Header: Authorization: Bearer <PAT>, Accept: application/vnd.github+json  /  Body: {"ref":"main"}
+#
+# 2026-10 実測: 06:30〜07:50 の予定が毎回 2.5〜4 時間遅れて起動(9時過ぎ着)。そのため
+# 03時台〜05時台にも予定を入れ、遅延込みで 06〜08時台に着地させる。06:10 より前に
+# 起動した回(=遅延しなかった回)は米国の引け前なので何もせず終了し、後続に任せる。
 on:
   workflow_dispatch: {}
-  schedule:                    # 早めに複数回。最初に動いた1回が送信し残りはスキップ(9時前着地を担保)
-    - cron: "30 21 * * 0-4"   # 06:30 JST(平日=UTC日〜木)
-    - cron: "50 21 * * 0-4"   # 06:50 JST
-    - cron: "10 22 * * 0-4"   # 07:10 JST
-    - cron: "30 22 * * 0-4"   # 07:30 JST
-    - cron: "50 22 * * 0-4"   # 07:50 JST
+  schedule:                    # 時刻は JST。平日 = UTC 日〜木。毎時 0 分/30 分は混むので避ける
+    - cron: "17 18 * * 0-4"   # 03:17 JST(遅延込みで 06 時台に着地する想定)
+    - cron: "47 18 * * 0-4"   # 03:47
+    - cron: "17 19 * * 0-4"   # 04:17
+    - cron: "47 19 * * 0-4"   # 04:47
+    - cron: "17 20 * * 0-4"   # 05:17
+    - cron: "47 20 * * 0-4"   # 05:47
+    - cron: "23 21 * * 0-4"   # 06:23(遅延しなかった場合の本命)
+    - cron: "53 21 * * 0-4"   # 06:53
+    - cron: "23 22 * * 0-4"   # 07:23
+    - cron: "53 22 * * 0-4"   # 07:53
 
 permissions:
   contents: write
@@ -37,9 +46,14 @@ jobs:
         id: guard
         run: |
           today=$(TZ=Asia/Tokyo date +%F)
-          echo "today=$today"
+          now=$(TZ=Asia/Tokyo date +%H%M)
+          echo "today=$today now=$now JST event=${{ github.event_name }}"
           if [ -f docs/.morning_state.json ] && grep -q "\"date\": \"$today\"" docs/.morning_state.json; then
             echo "Already ran today ($today) — skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" = "schedule" ] && (( 10#$now < 610 )); then
+            # Too early: the US session / futures have not closed yet. Leave it to a later run.
+            echo "Too early ($now JST, before 06:10) — skipping without marking."
             echo "skip=true" >> "$GITHUB_OUTPUT"
           else
             echo "skip=false" >> "$GITHUB_OUTPUT"

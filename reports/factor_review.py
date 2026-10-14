@@ -141,10 +141,12 @@ hist = json.loads((ROOT / "docs" / "history.json").read_text(encoding="utf-8"))
 live = []
 byd = df.set_index("date")
 for h in hist:
-    if h.get("actual_move") is None or h["date"] not in byd.index:
+    if h["date"] not in byd.index or h.get("expected_move") is None:
         continue
     f = byd.loc[h["date"]]
-    exp, act = h["expected_move"], h["actual_move"]
+    # Use the FINAL daily-bar gap: some recorded opens were taken from an in-progress
+    # bar after 09:00 and are wrong.
+    exp, act = h["expected_move"], float(f["gap"])
     hit = sgn(np.array([exp]))[0] == sgn(np.array([act]))[0]
     if hit:
         why = "的中"

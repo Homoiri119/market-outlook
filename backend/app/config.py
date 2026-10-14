@@ -42,7 +42,9 @@ class Settings(BaseSettings):
     # US-market -> next-day Nikkei regression estimate.
     outlook_strong_threshold: float = 0.008  # >= +0.8% => STRONG_UP (<= -0.8% => STRONG_DOWN)
     outlook_flat_threshold: float = 0.002  # within +/-0.2% => FLAT
-    futures_gap_weight: float = 0.7  # weight of the futures gap vs. the regression estimate
+    # Weight of the futures gap vs. the regression estimate. 0.9 per the factor review
+    # (2021-2026): futures alone explain ~70% of the opening gap; 0.9 hit 74.7% vs 73.2% at 0.7.
+    futures_gap_weight: float = 0.9
 
     # Scheduler
     daily_run_hour: int = 8

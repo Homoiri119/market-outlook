@@ -23,9 +23,21 @@ TICKERS = {
 NIKKEI_INDEX_TICKER = "^N225"
 
 # CME Nikkei 225 futures. Both quote in Nikkei index points; NIY=F settles in yen,
-# NKD=F in USD. They trade overnight, so at ~08:00 JST they already price in the
-# US close and are the market's own estimate of where Tokyo will open.
-NIKKEI_FUTURES_TICKERS = ["NIY=F", "NKD=F"]
+# NKD=F in USD. Their close for the last US session already prices in the US close and
+# is the market's own estimate of where Tokyo will open. NKD=F first: over 2021-2026
+# its close tracked the Tokyo opening gap better (corr 0.84 vs 0.77).
+NIKKEI_FUTURES_TICKERS = ["NKD=F", "NIY=F"]
+
+
+def _bars_before(data: pd.DataFrame, reference_date: dt.date | None) -> pd.Series:
+    """Daily closes strictly BEFORE reference_date (the Tokyo session being forecast),
+    so a bar still trading — e.g. when the job runs after the Tokyo open — is ignored
+    and the result is the same whenever the job runs."""
+    close = data["Close"].dropna()
+    close.index = [d.date() for d in close.index]
+    if reference_date is not None:
+        close = close[[d < reference_date for d in close.index]]
+    return close
 
 # Extra overnight indicators a JP investor checks pre-open. Each entry is a list of
 # fallback tickers tried in order.
@@ -88,6 +100,8 @@ def fetch_latest_us_market(reference_date: dt.date | None = None) -> dict | None
     if df.empty:
         return None
     df = df.dropna(subset=["sp500_close"])
+    if reference_date is not None:
+        df = df[[d < reference_date for d in df.index]]
     if df.empty:
         return None
     last = df.iloc[-1]
@@ -103,20 +117,44 @@ def fetch_nikkei_prev_close(reference_date: dt.date | None = None) -> dict | Non
     close when called pre-open) as {"date", "close"}, or None if unavailable."""
     try:
         tk = yf.Ticker(NIKKEI_INDEX_TICKER)
-        data = tk.history(period="10d", interval="1d")
-        close = data["Close"].dropna() if not data.empty else None
-        if close is None or close.empty:
+        data = tk.history(period="15d", interval="1d")
+        if data.empty:
             return None
-        return {"date": close.index[-1].date(), "close": float(close.iloc[-1])}
+        # Strictly before the forecast day: after 09:00 JST today's in-progress bar
+        # would otherwise be taken as the "previous close".
+        close = _bars_before(data, reference_date)
+        if close.empty:
+            return None
+        return {"date": close.index[-1], "close": float(close.iloc[-1])}
     except Exception:  # pragma: no cover - network dependent
         logger.exception("Failed to fetch Nikkei 225 index")
         return None
 
 
-def fetch_nikkei_futures() -> dict | None:
-    """Return the latest overnight Nikkei 225 futures price as {"ticker", "price"},
-    or None if unavailable. Tries intraday, then fast_info, then the last daily bar,
-    across the configured futures tickers."""
+def fetch_nikkei_futures(reference_date: dt.date | None = None,
+                         min_date: dt.date | None = None) -> dict | None:
+    """Return the Nikkei 225 futures price for the gap estimate as
+    {"ticker", "price", "asof", "method"}, or None.
+
+    Preferred: the close of the last CME session completed before reference_date (the
+    futures' own read of the US close), provided that session is not older than
+    min_date (the previous Tokyo session). Fallback: the old intraday snapshot."""
+    for ticker in NIKKEI_FUTURES_TICKERS:
+        try:
+            daily = yf.Ticker(ticker).history(period="10d", interval="1d")
+        except Exception:  # pragma: no cover - network dependent
+            logger.exception("Failed to fetch Nikkei futures %s", ticker)
+            continue
+        if daily.empty:
+            continue
+        close = _bars_before(daily, reference_date)
+        if close.empty or (min_date is not None and close.index[-1] < min_date):
+            continue
+        price = float(close.iloc[-1])
+        if price > 0:
+            return {"ticker": ticker, "price": price, "asof": close.index[-1].isoformat(),
+                    "method": "daily_close"}
+    logger.warning("No fresh futures daily close; falling back to the intraday snapshot")
     for ticker in NIKKEI_FUTURES_TICKERS:
         try:
             tk = yf.Ticker(ticker)
@@ -147,26 +185,26 @@ def fetch_nikkei_futures() -> dict | None:
                         price = float(closes.iloc[-1])
 
             if price and price > 0:
-                return {"ticker": ticker, "price": price}
+                return {"ticker": ticker, "price": price, "asof": None, "method": "intraday"}
         except Exception:  # pragma: no cover - network dependent
             logger.exception("Failed to fetch Nikkei futures %s", ticker)
     return None
 
 
-def fetch_extra_overnight() -> dict:
-    """Fetch extra overnight indicators (SOX semis, US 10Y yield, WTI crude).
-    Returns a flat dict; missing pieces are simply absent."""
+def fetch_extra_overnight(reference_date: dt.date | None = None) -> dict:
+    """Fetch extra overnight indicators (SOX semis, US 10Y yield, WTI crude) from bars
+    completed before reference_date. Returns a flat dict; missing pieces are absent."""
     out: dict = {}
     for name, tickers in EXTRA_TICKERS.items():
         for ticker in tickers:
             try:
-                data = yf.Ticker(ticker).history(period="8d", interval="1d")
+                data = yf.Ticker(ticker).history(period="10d", interval="1d")
             except Exception:  # pragma: no cover - network dependent
                 logger.exception("Failed to fetch %s (%s)", name, ticker)
                 continue
             if data.empty:
                 continue
-            close = data["Close"].dropna()
+            close = _bars_before(data, reference_date)
             if close.empty:
                 continue
             out[f"{name}_level"] = float(close.iloc[-1])
@@ -209,9 +247,10 @@ def fetch_overnight_snapshot(reference_date: dt.date | None = None) -> dict:
     """Bundle everything needed for the pre-open morning outlook:
     the latest US market row, the previous Nikkei cash close, the current Nikkei
     futures price, and extra overnight indicators. Any piece may be None/empty."""
+    nikkei_prev = fetch_nikkei_prev_close(reference_date)
     return {
         "us": fetch_latest_us_market(reference_date),
-        "nikkei_prev": fetch_nikkei_prev_close(reference_date),
-        "futures": fetch_nikkei_futures(),
-        "extra": fetch_extra_overnight(),
+        "nikkei_prev": nikkei_prev,
+        "futures": fetch_nikkei_futures(reference_date, nikkei_prev["date"] if nikkei_prev else None),
+        "extra": fetch_extra_overnight(reference_date),
     }

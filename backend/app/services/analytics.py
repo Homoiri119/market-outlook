@@ -46,14 +46,22 @@ def directional_hit(expected: float, actual: float, flat: float = HIT_FLAT_BAND)
     return sign(expected) == sign(actual)
 
 
-def backfill_history_actuals(history: list[dict], actual_gaps: dict[str, float]) -> list[dict]:
-    """Fill `actual_move` and `hit` on past history entries once the real open is known.
-    Mutates and returns the same list. Entries whose open is not yet available are left
-    as-is (actual_move stays None)."""
+def backfill_history_actuals(history: list[dict], actual_gaps: dict[str, float],
+                             before: str | None = None) -> list[dict]:
+    """Set `actual_move` and `hit` on history entries from the realized opens.
+    Mutates and returns the same list.
+
+    With `before` (ISO date of the session being forecast), only completed sessions
+    (date < before) are touched, and their values are always re-derived from the final
+    daily bars — so an open recorded from an in-progress bar is corrected later."""
     for entry in history:
-        if entry.get("actual_move") is not None:
+        date = entry.get("date")
+        if before is not None:
+            if not date or date >= before:
+                continue
+        elif entry.get("actual_move") is not None:
             continue
-        actual = actual_gaps.get(entry.get("date"))
+        actual = actual_gaps.get(date)
         if actual is None:
             continue
         entry["actual_move"] = actual

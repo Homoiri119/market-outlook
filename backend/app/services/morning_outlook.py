@@ -175,6 +175,29 @@ def _format_us_detail(us: dict | None) -> str:
     return prefix + " / ".join(parts)
 
 
+def _drivers_summary(implied_gap: float | None, us: dict | None, extra: dict | None) -> str:
+    """Overnight drivers, ordered by how much they move the Tokyo open (factor review
+    2021-2026: futures explain ~70%; NASDAQ/S&P/SOX ~40%; VIX ~30%; USD/JPY, US 10Y and
+    WTI ~0, so they are not listed). Small moves are left out."""
+    us, extra = us or {}, extra or {}
+    bits: list[str] = []
+    if implied_gap is not None:
+        bits.append(f"日経先物 {implied_gap:+.2%}" + ("(ほぼ横ばい)" if abs(implied_gap) < 0.002 else ""))
+    sox = extra.get("sox_return")
+    if sox is not None and abs(sox) >= 0.01:
+        bits.append(f"SOX {sox:+.2%}({'半導体高' if sox > 0 else '半導体安'})")
+    for key, label in (("nasdaq_return", "NASDAQ"), ("sp500_return", "S&P500")):
+        v = us.get(key)
+        if v is not None and abs(v) >= 0.005:
+            bits.append(f"{label} {v:+.2%}")
+    vix = us.get("vix_change")
+    if vix is not None and abs(vix) >= 1.0:
+        bits.append(f"VIX {vix:+.1f}({'警戒感' if vix > 0 else '安心感'})")
+    if len(bits) <= 1:
+        bits.append("米国株は小動き")
+    return "、".join(bits)
+
+
 def _build_narrative(
     *,
     direction: str,
@@ -184,6 +207,7 @@ def _build_narrative(
     nikkei_prev_close: float | None,
     implied_open_level: float | None,
     us: dict | None,
+    extra: dict | None = None,
 ) -> str:
     label = DIRECTION_LABELS_JP[direction]
     lines: list[str] = []
@@ -198,20 +222,7 @@ def _build_narrative(
     else:
         lines.append(f"本日の東京市場の寄り付き見通し: 約 {move_pct} 【{label}】")
 
-    # Drivers
-    driver_bits: list[str] = []
-    if us:
-        sp = us.get("sp500_return")
-        if sp is not None:
-            driver_bits.append("米国株の上昇" if sp > 0 else "米国株の下落")
-        usdjpy = us.get("usdjpy_return")
-        if usdjpy is not None:
-            driver_bits.append("円安" if usdjpy > 0 else "円高")
-        vix_chg = us.get("vix_change")
-        if vix_chg is not None and abs(vix_chg) >= 1.0:
-            driver_bits.append("VIX上昇(警戒感)" if vix_chg > 0 else "VIX低下(安心感)")
-    if driver_bits:
-        lines.append("主な背景: " + "、".join(driver_bits) + "。")
+    lines.append("主な背景: " + _drivers_summary(implied_gap, us, extra) + "。")
 
     # Signal breakdown
     detail_bits: list[str] = []

@@ -30,6 +30,8 @@ from app.services.morning_outlook import (
 
 logger = logging.getLogger(__name__)
 
+JST = dt.timezone(dt.timedelta(hours=9))
+
 
 def _feature_frame(start: dt.date, end: dt.date) -> pd.DataFrame:
     df = fetch_us_market_history(start, end)
@@ -77,7 +79,10 @@ def compute_stateless_outlook(date: dt.date | None = None) -> dict:
     range, trend context). The returned dict also carries `actual_gaps` (a date->gap
     map) so the caller can backfill prediction-accuracy history; strip it before
     persisting the outlook itself."""
-    date = date or dt.date.today()
+    # The forecast day is the Tokyo (JST) date. GitHub runners use UTC, so a 06:30 JST
+    # run would otherwise be labelled with the previous day.
+    now_jst = dt.datetime.now(JST)
+    date = date or now_jst.date()
     end = date
     start = end - dt.timedelta(days=settings.history_days)
 
@@ -87,7 +92,9 @@ def compute_stateless_outlook(date: dt.date | None = None) -> dict:
     futures = snapshot.get("futures")
     extra = snapshot.get("extra") or {}
 
-    nikkei_ohlc = fetch_nikkei_ohlc(start, end)
+    nikkei_all = fetch_nikkei_ohlc(start, end)  # may include today's bar if run after 09:00
+    # Model/context use completed sessions only, so the forecast doesn't depend on run time.
+    nikkei_ohlc = nikkei_all[nikkei_all["date"] < pd.Timestamp(date)] if not nikkei_all.empty else nikkei_all
     features = _feature_frame(start, end)
 
     nikkei_prev_close = nikkei_prev.get("close") if nikkei_prev else None
@@ -119,8 +126,8 @@ def compute_stateless_outlook(date: dt.date | None = None) -> dict:
     )
 
     # Enrichments: expected range from recent gap volatility, trend & vol regime.
-    actual_gaps = analytics.compute_actual_gaps(nikkei_ohlc)
-    recent_gaps = [actual_gaps[d] for d in sorted(actual_gaps)]
+    actual_gaps = analytics.compute_actual_gaps(nikkei_all)  # incl. today's, for backfilling
+    recent_gaps = [actual_gaps[d] for d in sorted(actual_gaps) if d < date.isoformat()]
     range_low, range_high = analytics.expected_range(expected_move, recent_gaps)
     context = analytics.nikkei_context(nikkei_ohlc)
     vix_close = us.get("vix_close") if us else None
@@ -139,6 +146,12 @@ def compute_stateless_outlook(date: dt.date | None = None) -> dict:
         "nikkei_futures": nikkei_futures,
         "implied_open_level": implied_open_level,
         "futures_source": futures_source,
+        "futures_asof": futures.get("asof") if futures else None,
+        "futures_method": futures.get("method") if futures else None,
+        "computed_at": now_jst.strftime("%Y-%m-%d %H:%M JST"),
+        # Delivered after the Tokyo open (GitHub schedule delay). The numbers above use
+        # completed sessions only, so they are unaffected — only the timing is late.
+        "late": now_jst.date() == date and now_jst.time() >= dt.time(9, 0),
         "expected_range_low": range_low,
         "expected_range_high": range_high,
         "expected_open_low": nikkei_prev_close * (1 + range_low) if nikkei_prev_close else None,
@@ -157,6 +170,7 @@ def compute_stateless_outlook(date: dt.date | None = None) -> dict:
             nikkei_prev_close=nikkei_prev_close,
             implied_open_level=implied_open_level,
             us=us,
+            extra=extra,
         ),
         "actual_gaps": actual_gaps,
     }

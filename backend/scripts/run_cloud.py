@@ -234,17 +234,21 @@ def load_history() -> list[dict]:
 
 def update_history(o: dict, actual_gaps: dict[str, float]) -> list[dict]:
     history = load_history()
-    # Backfill realized opens for past predictions now that they are known.
-    analytics.backfill_history_actuals(history, actual_gaps)
-    # Upsert today's entry, preserving any already-known actual.
+    # Realized opens for past sessions, always from the final daily bars (this also
+    # corrects opens that were once recorded from an in-progress bar after 09:00).
+    analytics.backfill_history_actuals(history, actual_gaps, before=o["date"])
+    # Upsert today's entry. Today's open is NOT recorded here even if the job runs
+    # after 09:00: the in-progress bar is unreliable. It is filled on the next run.
     existing = next((h for h in history if h.get("date") == o["date"]), None)
     entry = existing or {"date": o["date"]}
     entry["direction"] = o["direction"]
     entry["expected_move"] = o["expected_move"]
-    entry.setdefault("actual_move", actual_gaps.get(o["date"]))
-    entry.setdefault("hit", None)
-    if entry.get("actual_move") is not None and entry.get("hit") is None:
-        entry["hit"] = analytics.directional_hit(o["expected_move"], entry["actual_move"])
+    # When/how the forecast was made (to audit delays and the futures source later).
+    entry["computed_at"] = o.get("computed_at")
+    entry["late"] = o.get("late")
+    entry["futures_method"] = o.get("futures_method")
+    entry["actual_move"] = None
+    entry["hit"] = None
     if existing is None:
         history.append(entry)
     history.sort(key=lambda h: h["date"])
@@ -308,8 +312,10 @@ def main() -> int:
     footer = (f"\n\n━━━━━━━━━━━\n🔗 **ダッシュボード**: {dashboard_url}\n"
               "└ アウトルック / 個別銘柄 / ニュース / 💼実績\n└ 戦略検証 / バックテスト / セクター / 🆕IPO")
     top, note = rank_candidates(outlook)
+    late = ("⚠️ **配信遅延:寄り付き後の通知です**(GitHubの起動遅れ。予想値は前日までの確定データで計算済み)\n"
+            if outlook.get("late") else "")
     # URL at the top too, so it is always in the first message even if Discord splits it.
-    message = (f"🔗 {dashboard_url}\n"
+    message = (f"🔗 {dashboard_url}\n" + late
                + format_brief(outlook, accuracy) + selection_section(outlook, top=top, note=note) + footer)
     sent = send_discord_message(message)
     logger.info("Discord notification sent: %s", sent)
