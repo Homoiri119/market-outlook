@@ -59,7 +59,7 @@
 "date": "2026-08-31",
 "direction": "DOWN",
 "expected_move": -0.006652962610497833,
-"actual_move": -0.007008239797006294,
+"actual_move": -0.011099291380899002,
 "hit": true
 },
 {
@@ -199,29 +199,29 @@
 "date": "2026-09-29",
 "direction": "FLAT",
 "expected_move": 0.0015411886008745764,
-"actual_move": -0.012148280240500514,
+"actual_move": -0.00485179964980044,
 "hit": false
 },
 {
 "date": "2026-09-30",
 "direction": "FLAT",
 "expected_move": 0.0018587025102477655,
-"actual_move": 0.003809739532407097,
+"actual_move": 0.009885639410840589,
 "hit": true
 },
 {
 "date": "2026-10-01",
 "direction": "FLAT",
 "expected_move": 0.0010381540735295207,
-"actual_move": 0.024820134335886247,
+"actual_move": 0.005285169037867272,
 "hit": false
 },
 {
 "date": "2026-10-02",
 "direction": "UP",
 "expected_move": 0.0028758434561371926,
-"actual_move": 0.023365622420848275,
-"hit": true
+"actual_move": -0.009328428384652511,
+"hit": false
 },
 {
 "date": "2026-10-05",
@@ -248,14 +248,14 @@
 "date": "2026-10-08",
 "direction": "FLAT",
 "expected_move": 0.0018665772185188277,
-"actual_move": -0.011931076582177118,
+"actual_move": -0.0027852978129126313,
 "hit": false
 },
 {
 "date": "2026-10-09",
 "direction": "FLAT",
 "expected_move": 0.00032387576202222207,
-"actual_move": -0.01980719434315373,
+"actual_move": -0.005701004482092564,
 "hit": false
 },
 {
@@ -278,5 +278,15 @@
 "expected_move": 0.0013198145165562464,
 "actual_move": -0.015771125213587478,
 "hit": false
+},
+{
+"date": "2026-10-15",
+"direction": "STRONG_DOWN",
+"expected_move": -0.017699481360874365,
+"computed_at": "2026-10-15 06:45 JST",
+"late": false,
+"futures_method": "daily_close",
+"actual_move": null,
+"hit": null
 }
 ]
