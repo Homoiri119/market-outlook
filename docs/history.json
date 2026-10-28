@@ -366,14 +366,24 @@
 "computed_at": "2026-10-27 07:43 JST",
 "late": false,
 "futures_method": "daily_close",
-"actual_move": null,
-"hit": null
+"actual_move": 0.006101171127881888,
+"hit": true
 },
 {
 "date": "2026-10-28",
 "direction": "STRONG_UP",
 "expected_move": 0.03326499044182785,
 "computed_at": "2026-10-28 07:17 JST",
+"late": false,
+"futures_method": "daily_close",
+"actual_move": null,
+"hit": null
+},
+{
+"date": "2026-10-29",
+"direction": "STRONG_UP",
+"expected_move": 0.01662673656287826,
+"computed_at": "2026-10-29 07:39 JST",
 "late": false,
 "futures_method": "daily_close",
 "actual_move": null,
