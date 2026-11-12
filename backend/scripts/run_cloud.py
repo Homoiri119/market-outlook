@@ -22,7 +22,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.clients.discord_notifier import send_discord_message  # noqa: E402
-from app.services import analytics, portfolio, selection  # noqa: E402
+from app.services import analytics, crash_rules, portfolio, selection  # noqa: E402
 from app.services.cloud_outlook import compute_stateless_outlook  # noqa: E402
 from app.services.morning_outlook import DIRECTION_LABELS_JP  # noqa: E402
 from app.services.news import fetch_news, summarize  # noqa: E402
@@ -295,6 +295,24 @@ def track_portfolio(top: list[dict], date: str) -> None:
                 f"{summary['equity']:,}", summary["n_open"], summary["n_closed"])
 
 
+def crash_rules_block() -> str:
+    """Index crash-buy rulebook state (best-effort; never blocks the brief).
+    Also saved to docs/crash_rules.json as the daily record the rulebook asks for."""
+    try:
+        st = crash_rules.compute_state()
+    except Exception:
+        logger.exception("Crash-rule evaluation failed (skipped)")
+        st = None
+    if st:
+        st["generated_at"] = _jst_now().strftime("%Y-%m-%d %H:%M JST")
+        DOCS_DIR.mkdir(parents=True, exist_ok=True)
+        (DOCS_DIR / "crash_rules.json").write_text(json.dumps(st, ensure_ascii=False, indent=1),
+                                                   encoding="utf-8")
+        logger.info("Crash rules: %d -> %d units (T %s)", st["current_units"],
+                    st["target_units"], "on" if st["trend_on"] else "off")
+    return crash_rules.format_section(st)
+
+
 def main() -> int:
     outlook = compute_stateless_outlook()
     actual_gaps = outlook.pop("actual_gaps", {})  # internal; not part of the stored outlook
@@ -316,7 +334,8 @@ def main() -> int:
             if outlook.get("late") else "")
     # URL at the top too, so it is always in the first message even if Discord splits it.
     message = (f"🔗 {dashboard_url}\n" + late
-               + format_brief(outlook, accuracy) + selection_section(outlook, top=top, note=note) + footer)
+               + format_brief(outlook, accuracy) + crash_rules_block()
+               + selection_section(outlook, top=top, note=note) + footer)
     sent = send_discord_message(message)
     logger.info("Discord notification sent: %s", sent)
 
