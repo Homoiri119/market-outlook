@@ -1,6 +1,6 @@
 """Index crash-buy rulebook v1 (reports/index_crash_rulebook.md).
 
-Three rules on the Nikkei 225 close; capital is split into 3 units (max 3 = 100%):
+Three rules on the close of the TOPIX ETF 1305 (the instrument that is traded); capital is split into 3 units (max 3 = 100%):
   T  close > 200-day MA                         -> 3 units while on
   B  close/MA25 - 1 <= -10% (once per episode)  -> 1 unit; exit the day after the close
                                                   is back >= MA25, or after 20 sessions
@@ -31,7 +31,9 @@ C_DD = -0.15
 C_REARM = -0.05
 C_HOLD = 120
 WARMUP = 260
-HISTORY_START = dt.date(1995, 1, 1)
+TICKER = "1305.T"  # Daiwa TOPIX ETF: clean daily history since 2008 (1306/1348 have bad bars)
+TICKER_LABEL = "TOPIX連動ETF 1305"
+HISTORY_START = dt.date(2008, 1, 1)
 LABELS = {"B": "B 乖離−10%", "C": "C 高値−15%"}
 
 
@@ -122,10 +124,10 @@ def replay(close: pd.Series) -> tuple[pd.Series, Plan, list[dict]]:
 
 
 def fetch_close(today: dt.date) -> pd.Series:
-    """Nikkei 225 closes up to the last completed session (drops today's in-progress bar)."""
+    """1305 closes (unadjusted) up to the last completed session (drops today's in-progress bar)."""
     import yfinance as yf  # local import: heavy, network
 
-    data = yf.Ticker("^N225").history(start=HISTORY_START.isoformat(),
+    data = yf.Ticker(TICKER).history(start=HISTORY_START.isoformat(),
                                       end=(today + dt.timedelta(days=1)).isoformat(),
                                       interval="1d", auto_adjust=False)
     if data.empty:
@@ -153,6 +155,7 @@ def evaluate(close: pd.Series) -> dict:
         return d
 
     return {
+        "ticker": TICKER_LABEL,
         "asof": close.index[i].date().isoformat(),
         "close": round(float(c[i]), 2),
         "ma25_dev": float(c[i] / x["ma25"][i] - 1),
@@ -175,16 +178,16 @@ def compute_state(today: dt.date | None = None) -> dict | None:
     today = today or dt.datetime.now(dt.timezone(dt.timedelta(hours=9))).date()
     close = fetch_close(today)
     if len(close) < WARMUP + 1:
-        logger.warning("Not enough Nikkei history for crash rules (%d bars)", len(close))
+        logger.warning("Not enough TOPIX ETF history for crash rules (%d bars)", len(close))
         return None
     return evaluate(close)
 
 
 def format_section(st: dict | None) -> str:
     lines = ["", "━━━━━━━━━━━", "🛡 **指数ルール(暴落買い v1)**",
-             "└ 日経225ETF・資金3ユニット・本日の引成で調整", "━━━━━━━━━━━"]
+             f"└ {TICKER_LABEL}・資金3ユニット・本日の引成で調整", "━━━━━━━━━━━"]
     if not st:
-        lines.append("⚠️ 日経平均のデータが取れず、判定できませんでした。")
+        lines.append(f"⚠️ {TICKER_LABEL}のデータが取れず、判定できませんでした。")
         return "\n".join(lines)
     diff = st["target_units"] - st["current_units"]
     if diff > 0:
@@ -200,7 +203,7 @@ def format_section(st: dict | None) -> str:
     reasons += [f"{LABELS[e['kind']]}({e['entry_date']}買い)手仕舞い" for e in st["exits"]]
     if reasons:
         lines.append("　" + " / ".join(reasons))
-    lines.append(f"　日経 {st['close']:,.0f}({st['asof']}・前日比 {st['day_ret'] * 100:+.1f}%)")
+    lines.append(f"　1305 {st['close']:,.0f}円({st['asof']}・前日比 {st['day_ret'] * 100:+.1f}%)")
     lines.append(f"　T 200日線 {st['ma200_dev'] * 100:+.1f}% → {'オン' if st['trend_on'] else 'オフ'}")
     lines.append(f"　B 25日線乖離 {st['ma25_dev'] * 100:+.1f}%(基準 −10%)")
     lines.append(f"　C 250日高値から {st['dd250'] * 100:+.1f}%(基準 −15%)")

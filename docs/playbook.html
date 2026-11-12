@@ -3,50 +3,44 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>プレイブック(指数の暴落買い v1) | 寄り付き前アウトルック</title>
+<title>プレイブック | 寄り付き前アウトルック</title>
 <style>
   :root{--bg:#0f172a;--panel:#1e293b;--panel-2:#273449;--text:#e2e8f0;--muted:#94a3b8;--line:#334155;--up:#22c55e;--down:#ef4444;--accent:#38bdf8;--amber:#f59e0b;}
   *{box-sizing:border-box;}
-  body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif;line-height:1.7;}
-  .wrap{max-width:1000px;margin:0 auto;padding:1.5rem 1.25rem 3rem;}
-  header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem;}
-  header h1{font-size:1.15rem;margin:0;}
-  .sub{color:var(--muted);font-size:.82rem;}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:"Segoe UI","Hiragino Sans","Yu Gothic",sans-serif;line-height:1.75;}
+  .wrap{max-width:900px;margin:0 auto;padding:1.5rem 1.25rem 3rem;}
+  h1{font-size:1.2rem;margin:0 0 .3rem;}
+  .sub{color:var(--muted);font-size:.85rem;}
   section.card{background:var(--panel);border-radius:16px;padding:1.1rem 1.4rem;margin-top:1rem;}
-  h2{font-size:1.02rem;margin:0 0 .6rem;}
-  h3{font-size:.92rem;margin:1rem 0 .4rem;color:var(--accent);}
+  h2{font-size:1.05rem;margin:0 0 .6rem;}
+  h3{font-size:.95rem;margin:1rem 0 .4rem;color:var(--accent);}
   table{width:100%;border-collapse:collapse;}
-  th,td{text-align:left;padding:.45rem .55rem;border-bottom:1px solid var(--line);font-size:.86rem;vertical-align:top;}
+  th,td{text-align:left;padding:.45rem .55rem;border-bottom:1px solid var(--line);font-size:.88rem;vertical-align:top;}
   th{color:var(--muted);font-weight:600;}
   td.num,th.num{text-align:right;white-space:nowrap;}
   .pos{color:var(--up);}.neg{color:var(--down);}
   .muted{color:var(--muted);}
-  .disc{font-size:.75rem;color:var(--muted);line-height:1.6;}
-  code{background:var(--panel-2);padding:.05rem .35rem;border-radius:6px;font-size:.85em;}
-  .formula{background:var(--panel-2);border-radius:10px;padding:.7rem 1rem;font-family:Consolas,monospace;font-size:.88rem;margin:.5rem 0;}
+  .disc{font-size:.76rem;color:var(--muted);line-height:1.6;}
+  .big{background:rgba(56,189,248,.12);border:1px solid var(--accent);border-radius:12px;padding:.9rem 1.1rem;font-size:1.02rem;}
+  .big b{color:#fff;}
   ol.steps{padding-left:1.3rem;margin:.3rem 0;}
-  ol.steps li{margin:.35rem 0;}
-  .action{border-radius:12px;padding:.8rem 1rem;font-size:1.05rem;font-weight:700;margin-bottom:.8rem;}
-  .action.buy{background:rgba(34,197,94,.15);border:1px solid var(--up);}
-  .action.sell{background:rgba(239,68,68,.15);border:1px solid var(--down);}
-  .action.hold{background:var(--panel-2);border:1px solid var(--line);}
-  .kpis{display:flex;gap:.6rem;flex-wrap:wrap;margin:.4rem 0 .6rem;}
-  .kpi{background:var(--panel-2);border-radius:12px;padding:.6rem .9rem;min-width:140px;flex:1;}
+  ol.steps li{margin:.45rem 0;}
+  ul.ng{padding-left:1.2rem;margin:.3rem 0;}
+  ul.ng li{margin:.3rem 0;}
+  .kpis{display:flex;gap:.6rem;flex-wrap:wrap;margin:.4rem 0 .4rem;}
+  .kpi{background:var(--panel-2);border-radius:12px;padding:.6rem .9rem;min-width:150px;flex:1;}
   .kpi .l{font-size:.75rem;color:var(--muted);}
-  .kpi .v{font-size:1.05rem;font-weight:700;}
-  .tag{display:inline-block;border-radius:6px;padding:0 .45rem;font-size:.78rem;font-weight:700;}
+  .kpi .v{font-size:1.1rem;font-weight:700;}
+  .tag{display:inline-block;border-radius:6px;padding:0 .45rem;font-size:.8rem;font-weight:700;}
   .tag.on{background:rgba(34,197,94,.2);color:var(--up);}
-  .tag.off{background:rgba(148,163,184,.2);color:var(--muted);}
-  .calc{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:.6rem;margin:.5rem 0;}
-  .calc label{font-size:.78rem;color:var(--muted);display:block;}
-  .calc input{width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;color:var(--text);padding:.45rem .55rem;font-size:.95rem;}
-  .result{background:var(--panel-2);border-radius:10px;padding:.7rem 1rem;font-weight:700;margin-top:.4rem;}
-  .warn{border-left:4px solid var(--amber);}
-  .empty{color:var(--muted);padding:1rem 0;}
+  .tag.off{background:rgba(239,68,68,.2);color:var(--down);}
+  .rank{display:inline-block;min-width:1.6rem;text-align:center;font-weight:700;color:var(--accent);}
+  tr.top td{background:rgba(56,189,248,.08);}
   .scroll{overflow-x:auto;}
-  @media (max-width:640px){th,td{padding:.35rem .3rem;font-size:.78rem;} .wrap{padding:1rem .7rem 2rem;} section.card{padding:.9rem .9rem;} .kpi{min-width:120px;}}
+  .empty{color:var(--muted);padding:.6rem 0;}
+  @media (max-width:640px){th,td{padding:.35rem .3rem;font-size:.8rem;} .wrap{padding:1rem .7rem 2rem;} section.card{padding:.9rem .9rem;}}
 </style>
-<script>window.__CR__ = {"asof": "2026-11-11", "close": 61248.59, "ma25_dev": -0.04591727870494655, "ma200_dev": -0.013019870005945733, "dd250": -0.153631554810312, "day_ret": 0.01305023526824356, "trend_on": false, "trend_was_on": false, "positions": [{"kind": "C", "entry_date": "2026-07-30", "entry_close": 61867.43, "sessions": 68, "ret": -0.010002675832434527, "sessions_left": 52}, {"kind": "C", "entry_date": "2026-11-06", "entry_close": 57434.77, "sessions": 3, "ret": 0.0664026397881674, "sessions_left": 117}, {"kind": "B", "entry_date": "2026-11-09", "entry_close": 58775.5, "sessions": 2, "ret": 0.04207688311881652, "sessions_left": 18}], "exits": [], "entries": [], "current_units": 3, "target_units": 3, "recent_trades": [{"kind": "C", "entry": "2016-01-12", "exit": "2016-07-06", "ret": -0.10685724358186177}, {"kind": "B", "entry": "2018-12-26", "exit": "2019-01-21", "ret": 0.07203731410026126}, {"kind": "C", "entry": "2018-12-21", "exit": "2019-06-27", "ret": 0.058116109217073}, {"kind": "B", "entry": "2020-03-10", "exit": "2020-04-08", "ret": -0.02586579879108908}, {"kind": "C", "entry": "2020-03-10", "exit": "2020-09-04", "ret": 0.1680319387650273}, {"kind": "C", "entry": "2022-02-25", "exit": "2022-08-23", "ret": 0.07464166336184919}, {"kind": "B", "entry": "2024-08-06", "exit": "2024-08-19", "ret": 0.07824438617096607}, {"kind": "C", "entry": "2024-08-06", "exit": "2025-02-04", "ret": 0.11889993801902876}, {"kind": "B", "entry": "2025-04-08", "exit": "2025-04-25", "ret": 0.0815798192450321}, {"kind": "C", "entry": "2025-04-01", "exit": "2025-09-25", "ret": 0.2843676338700991}], "generated_at": "2026-11-12 12:48 JST"};</script>
+<script>window.__CR__ = {"ticker": "TOPIX連動ETF 1305", "asof": "2026-11-11", "close": 4180.0, "ma25_dev": -0.01675746370470732, "ma200_dev": 0.009106096159603005, "dd250": -0.06004047672588264, "day_ret": 0.008687258687258614, "trend_on": true, "trend_was_on": true, "positions": [], "exits": [], "entries": [], "current_units": 3, "target_units": 3, "recent_trades": [{"kind": "B", "entry": "2016-02-15", "exit": "2016-03-03", "ret": 0.057992565055762}, {"kind": "B", "entry": "2018-12-26", "exit": "2019-01-16", "ret": 0.07266666666666666}, {"kind": "C", "entry": "2018-10-26", "exit": "2019-04-22", "ret": 0.026363091671659733}, {"kind": "B", "entry": "2020-03-09", "exit": "2020-03-30", "ret": 0.04719562243502051}, {"kind": "C", "entry": "2020-03-09", "exit": "2020-09-03", "ret": 0.16142270861833108}, {"kind": "C", "entry": "2022-03-09", "exit": "2022-09-02", "ret": 0.08519816662173096}, {"kind": "B", "entry": "2024-08-05", "exit": "2024-08-21", "ret": 0.19021276595744685}, {"kind": "C", "entry": "2024-08-06", "exit": "2025-02-04", "ret": 0.150595238095238}, {"kind": "B", "entry": "2025-04-08", "exit": "2025-04-25", "ret": 0.07985446189199541}, {"kind": "C", "entry": "2025-04-08", "exit": "2025-10-02", "ret": 0.251627728839525}], "generated_at": "2026-11-12 14:14 JST"};</script>
 </head>
 <body>
 <div class="wrap">
@@ -62,246 +56,124 @@
     <a href="./playbook.html" style="color:#052132;background:#38bdf8;text-decoration:none;border:1px solid #38bdf8;border-radius:8px;padding:.4rem .7rem;font-weight:700">🛡 プレイブック</a>
   </nav>
 
-  <header>
-    <h1>🛡 プレイブック:指数の暴落買い v1</h1>
-  </header>
-  <div class="sub">売買するのは日経225連動ETFだけ。判断は日経平均の終値、注文は翌営業日の引成。迷ったら、このページに書いてあることだけをする。</div>
+  <h1>🛡 プレイブック:再現性が高く、利益が出た手法</h1>
+  <div class="sub">これまでの検証(日経平均 2000〜2026年、TOPIX 2009〜2026年、全上場銘柄 2024〜2026年)を1ページにまとめたもの。</div>
 
-  <!-- ============ ルール ============ -->
+  <!-- ============ 結論 ============ -->
   <section class="card">
-    <h2>1. ルール</h2>
-    <table>
-      <tr><th style="width:9rem">項目</th><th>決めごと</th></tr>
-      <tr><td>売買するもの</td><td>日経225連動ETF 1銘柄だけ(例:1321)。個別株・信用取引・レバレッジETF・インバースETFは使わない</td></tr>
-      <tr><td>判断に使う値</td><td>日経平均の<b>終値</b>(15:30以降に確定した値)</td></tr>
-      <tr><td>注文</td><td>判断した翌営業日の<b>引成</b>(その日の終値で約定)</td></tr>
-      <tr><td>資金の単位</td><td>この口座の資金を<b>3等分</b>し、1つを「1ユニット」とする。保有は最大3ユニット(=資金の100%)</td></tr>
-    </table>
-
-    <h3>3つの判定(前営業日の終値で判定する)</h3>
-    <table>
-      <tr><th style="width:7.5rem">判定</th><th>買う条件</th><th>手仕舞う条件</th><th class="num">量</th></tr>
-      <tr><td><b>T</b> 上昇局面</td><td>終値が200日移動平均より上</td><td>終値が200日移動平均以下</td><td class="num">3ユニット</td></tr>
-      <tr><td><b>B</b> 短期の売られすぎ</td><td>25日移動平均からの乖離が<b>−10%以下</b>になった。1回の下落局面で1回だけ(乖離が0%以上に戻ったら、次の点灯に備える)</td><td>終値が25日移動平均以上に戻った日の翌営業日、または買ってから20営業日目</td><td class="num">1ユニット</td></tr>
-      <tr><td><b>C</b> 大きな調整</td><td>250日高値から<b>−15%以下</b>になった。1回だけ(高値から−5%以内に戻ったら、次の点灯に備える)</td><td>買ってから120営業日目(約半年)。途中では売らない</td><td class="num">1ユニット</td></tr>
-    </table>
-
-    <h3>目標ユニット数</h3>
-    <div class="formula">目標ユニット数 = max( Tがオンなら3・オフなら0 , 保有中のBとCの数 )  ※上限3</div>
-    <ul>
-      <li>上昇局面(Tオン)では常に3ユニット。BやCが点灯しても上乗せしない。</li>
-      <li>200日線を割ったらTの分を売るが、保有期間中のBとCの分は持ち続ける。</li>
-      <li>B・Cがすでに3つある時の新しい点灯は見送る(上限3)。</li>
-    </ul>
+    <h2>結論</h2>
+    <div class="big">
+      一番再現性が高く、利益が出たのは<br>
+      <b>「TOPIXの投資信託かETFを買って、ずっと持つ」</b>こと。<br>
+      調べたほかの売買手法は、ほとんどがこれに負けた。
+    </div>
   </section>
 
+  <!-- ============ やること ============ -->
   <section class="card">
-    <h2>2. 資金管理のルール</h2>
-    <table>
-      <tr><th style="width:9rem">ルール</th><th>中身</th></tr>
-      <tr><td>上限</td><td>資金の100%まで。信用取引・レバレッジは使わない</td></tr>
-      <tr><td>ナンピン</td><td>B・Cとしてルールが出した買い以外は買わない。「もっと下がったから追加」は禁止</td></tr>
-      <tr><td>損切り</td><td><b>価格での損切りはしない</b>。B・Cは日数で手仕舞う(検証では−15%の損切りを入れると年率が下がった)</td></tr>
-      <tr><td>停止ルール</td><td>この口座が高値から<b>−45%</b>まで下がったら、新しい売買を止めてルールを見直す(過去最悪は−34%)</td></tr>
-      <tr><td>ルールの変更</td><td>年1回まで。理由を書き残し、過去の売買はやり直さない</td></tr>
-      <tr><td>裁量の禁止</td><td>ニュース・相場観・含み損益を理由に、通知と違う売買をしない</td></tr>
-    </table>
+    <h2>やること</h2>
+    <ol class="steps">
+      <li><b>TOPIXの投資信託かETF</b>(例:ETFの1305)を、<b>毎月決まった額で買い続ける</b>。NISAがあれば使う。</li>
+      <li><b>売らない</b>。下がった時も、上がった時も、そのまま持つ。</li>
+      <li>下の「やってはいけないこと」をしない。</li>
+    </ol>
+    <h3>下落の年に大きく減るのが、どうしても耐えられない場合だけ</h3>
+    <ol class="steps">
+      <li><b>月末に1回だけ</b>、TOPIXが200日移動平均より上か下かを見る(下の「今のTOPIX」に出ている)。</li>
+      <li>下なら売って現金にし、上に戻った月末に買い戻す。月の途中では何もしない。</li>
+    </ol>
+    <div class="disc">この方法が効いたのは、2000〜2003年や2008年のような長く深い下落(日経平均の最大下落 −66% → −36%)。上昇の年には取り逃がしが出る。TOPIXの2009〜2026年は長い下落がなかったため、年率も最大下落も「ずっと持つ」の方が良かった(年率+9.0%に対して+5.1%)。</div>
   </section>
 
-  <!-- ============ 今日やること ============ -->
-  <section class="card" id="today">
-    <h2>📌 今日やること</h2>
+  <!-- ============ 今のTOPIX ============ -->
+  <section class="card" id="now">
+    <h2>今のTOPIX(月末の確認用)</h2>
     <div id="state"><div class="empty">読み込み中...</div></div>
   </section>
 
-  <!-- ============ 手順 ============ -->
+  <!-- ============ 順位 ============ -->
   <section class="card">
-    <h2>3. 機械的に実行する手順</h2>
-
-    <h3>3-1. 最初に1回だけ</h3>
-    <ol class="steps">
-      <li>このルール専用の口座(または区分)を決め、使う資金を決める。ほかの売買と混ぜない。</li>
-      <li>売買するETFを1つ決める(例:1321)。<b>1ユニット(資金の1/3)で1口以上買える</b>ことを確認する。買えない場合は、1口の価格が低い日経225連動ETFにするか、資金を増やす。</li>
-      <li>記録用の表を作る。列は「日付・通知の内容(現在→目標ユニット)・注文(売買・口数)・約定値・保有口数・保有ユニット・口座評価額」。</li>
-      <li>Discordの朝の通知に「🛡 指数ルール」の欄が来ることを確認する。</li>
-      <li><b>始める日</b>:その日の通知の<b>目標ユニット数</b>まで、その日の引成で買う(下の計算機を使う)。そこからは毎朝の手順だけを繰り返す。</li>
-    </ol>
-
-    <h3>3-2. 毎朝(通知が来たら、9:00までに)</h3>
-    <ol class="steps">
-      <li>Discordの「🛡 指数ルール」の1行目を見る。
-        <table style="margin:.4rem 0">
-          <tr><th style="width:14rem">1行目</th><th>やること</th></tr>
-          <tr><td>✅ 売買なし</td><td><b>何もしない</b>。記録に「売買なし」と書いて終わり</td></tr>
-          <tr><td>🔔 本日の引けで nユニット買い</td><td>下の計算機で口数を出し、<b>引成の買い</b>を出す</td></tr>
-          <tr><td>🔔 本日の引けで nユニット売り</td><td>下の計算機で口数を出し、<b>引成の売り</b>を出す</td></tr>
-          <tr><td>⚠️ 判定できませんでした</td><td>3-5の「通知が使えない日」の手順に従う</td></tr>
-        </table>
-      </li>
-      <li>注文は<b>朝のうちに出してよい</b>(引成なので、約定はその日の終値)。証券会社の引成の受付締切を確認しておく。</li>
-      <li>口数の決め方:
-        <div class="formula">買い:口数 = 切り捨て( 口座評価額 ÷ 3 × 買うユニット数 ÷ ETFの前日終値 )<br>売り:口数 = 保有口数 × 売るユニット数 ÷ 保有ユニット数  (目標0なら全部売る)</div>
-        口座評価額は「現金+ETFの前日終値での時価」。
-      </li>
-    </ol>
-
-    <h3>3-3. 引け後(または翌朝)</h3>
-    <ol class="steps">
-      <li>約定したか、約定値と口数を確認する。</li>
-      <li>記録の表に書く。保有ユニット数が通知の目標ユニット数と同じになっていることを確かめる。</li>
-      <li>約定しなかった(注文の出し忘れ・失効)場合は、翌営業日の引成で同じ注文を出す。<b>翌朝の通知の「現在」はルール上の数なので、自分の保有ユニットとの差を必ず埋める</b>。</li>
-    </ol>
-
-    <h3>3-4. 毎月1回</h3>
-    <ol class="steps">
-      <li>記録の保有ユニット数と、このページの「ルール上の保有」が一致しているか確認する。ずれていたら、次の営業日の引成で合わせる。</li>
-      <li>口座評価額の高値からの下落率を計算する。<b>−45%以下なら停止ルール</b>(新しい売買を止めて見直す)。</li>
-    </ol>
-
-    <h3>3-5. 例外の時</h3>
-    <table>
-      <tr><th style="width:14rem">状況</th><th>やること</th></tr>
-      <tr><td>通知が遅れた(寄り付き後に届いた)</td><td>引けの前なら、その日の引成で通常どおり注文する</td></tr>
-      <tr><td>通知が来ない・判定できなかった</td><td>このページの「今日やること」を見る(朝の処理が動いていれば更新されている)。それも古い場合は、下の「手で判定する方法」で判定する。判定できなければ<b>何もしない</b>(保有を変えない)</td></tr>
-      <tr><td>引成を出し忘れた</td><td>翌営業日の引成で、その日の目標ユニット数に合わせる(日中に慌てて成行で買わない)</td></tr>
-      <tr><td>証券会社の障害・休場</td><td>次に注文できる営業日の引成で合わせる</td></tr>
-      <tr><td>大きなニュース・急落の最中</td><td>ルールの通知どおりにする。通知が出ていない日は何もしない</td></tr>
-      <tr><td>資金を追加・引き出したい</td><td>月1回の確認日にまとめて行い、追加分は「口座評価額÷3」の再計算に含める。B・Cの保有日数は変えない</td></tr>
-    </table>
-
-    <h3>手で判定する方法(通知が使えない日だけ)</h3>
-    <ol class="steps">
-      <li>日経平均の直近の終値を、少なくとも250営業日分用意する。</li>
-      <li>25日移動平均・200日移動平均(終値の単純平均)と、250日高値(終値の最大値)を計算する。</li>
-      <li>T:終値 > 200日平均ならオン。</li>
-      <li>B:終値 ÷ 25日平均 − 1 が −10%以下になった最初の日なら、翌営業日に1ユニット買い。保有中のBは、終値が25日平均以上に戻った翌営業日、または20営業日目に売る。</li>
-      <li>C:終値 ÷ 250日高値 − 1 が −15%以下になった最初の日なら、翌営業日に1ユニット買い。保有中のCは120営業日目に売る。</li>
-      <li>1.の目標ユニット数の式で目標を出し、保有との差を引成で売買する。</li>
-    </ol>
+    <h2>利益が出た順位(長い期間の通算)</h2>
+    <div class="scroll"><table>
+      <tr><th style="width:2.5rem">順位</th><th>手法</th><th class="num">年率</th><th class="num">一番悪い時の下落</th></tr>
+      <tr class="top"><td><span class="rank">1</span></td><td><b>TOPIXを買ってずっと持つ</b></td><td class="num pos">+9.0%</td><td class="num">−35%</td></tr>
+      <tr><td><span class="rank">2</span></td><td>暴落した時に買い増すルール(朝のDiscordの「🛡 指数ルール」)</td><td class="num pos">+6.2%</td><td class="num">−31%</td></tr>
+      <tr><td><span class="rank">3</span></td><td>月末に200日線を下回ったら売り、上回ったら買い戻す</td><td class="num pos">+5.1%</td><td class="num">−43%(日経平均では −36%)</td></tr>
+      <tr><td><span class="rank">4</span></td><td>ゴールデンクロス・MACDで売買(日経平均)</td><td class="num">+1〜2%</td><td class="num">小さい</td></tr>
+      <tr><td><span class="rank">5</span></td><td>RSI・ボリンジャーバンドで売買(日経平均)</td><td class="num">0〜+3%</td><td class="num">小さい</td></tr>
+      <tr><td><span class="rank">6</span></td><td>個別株の売買手法(高値ブレイク・出来高急増・材料で買う など)</td><td class="num neg">多くはTOPIXに負け</td><td class="num">大きい</td></tr>
+      <tr><td><span class="rank">7</span></td><td>急騰株・注目株への飛び乗り、ナンピン+信用取引</td><td class="num neg">大きくマイナス</td><td class="num neg">退場の原因</td></tr>
+    </table></div>
+    <div class="disc">1〜3位はTOPIX(ETF 1305)2009〜2026年、4〜5位は日経平均 2000〜2026年、6〜7位は全上場銘柄 2024〜2026年(上場廃止を含む)。往復コスト0.1〜0.2%、配当なし。</div>
   </section>
 
-  <!-- ============ 計算機 ============ -->
+  <!-- ============ 相場ごと ============ -->
   <section class="card">
-    <h2>4. 口数の計算機</h2>
-    <div class="calc">
-      <div><label>口座評価額(円)</label><input id="cap" type="number" inputmode="numeric" placeholder="例 3000000"></div>
-      <div><label>ETFの前日終値(円)</label><input id="px" type="number" inputmode="decimal" placeholder="例 64000"></div>
-      <div><label>今の保有口数</label><input id="sh" type="number" inputmode="numeric" value="0"></div>
-      <div><label>今の保有ユニット数</label><input id="cu" type="number" min="0" max="3" value="0"></div>
-      <div><label>目標ユニット数(通知の値)</label><input id="tu" type="number" min="0" max="3" value="0"></div>
-    </div>
-    <div class="result" id="calcOut">口座評価額とETFの価格を入れてください。</div>
-    <div class="disc" style="margin-top:.4rem">入力はこの端末のブラウザにだけ保存されます(送信しません)。</div>
-  </section>
-
-  <!-- ============ 保有・履歴 ============ -->
-  <section class="card">
-    <h2>5. ルール上の保有と売買履歴</h2>
-    <div id="history"><div class="empty">読み込み中...</div></div>
-  </section>
-
-  <!-- ============ 期待値 ============ -->
-  <section class="card">
-    <h2>6. 想定される成績と、このルールの性格</h2>
-    <table>
-      <tr><th>日経平均 2000〜2026年</th><th class="num">年率</th><th class="num">最大下落</th><th class="num">平均の投資比率</th></tr>
-      <tr><td>買って持つだけ</td><td class="num">+4.5%</td><td class="num neg">−66%</td><td class="num">100%</td></tr>
-      <tr><td><b>このルール</b></td><td class="num"><b>+4.7%</b></td><td class="num">−34%</td><td class="num">67%</td></tr>
-      <tr><td class="muted">2000〜2012年(下げ相場)</td><td class="num muted">+1.7%(持つだけ −4.5%)</td><td class="num muted">−33%</td><td></td></tr>
-      <tr><td class="muted">2013〜2026年(上げ相場)</td><td class="num muted">+7.6%(持つだけ +13.4%)</td><td class="num muted">−34%</td><td></td></tr>
-    </table>
-    <ul>
-      <li><b>大きな下げを半分にするルール</b>で、指数に勝つルールではない。2008年は−42%に対して−5.5%。</li>
-      <li><b>上げ相場では負ける</b>。「買って持つだけ」に勝つ年は約35%しかない。負けている年にルールを捨てないこと。</li>
-      <li>一番苦しかったのは2018年1月〜2020年3月(−34%)。200日線の出入りで損を重ねたあと、コロナの急落が来た。</li>
+    <h2>相場ごとの順位(日経平均・平均年率)</h2>
+    <div class="scroll"><table>
+      <tr><th style="width:2.5rem">順位</th><th>上昇の年(12回)</th><th>レンジの年(8回)</th><th>下落の年(7回)</th></tr>
+      <tr><td><span class="rank">1</span></td><td><b>買ってずっと持つ</b> <span class="pos">+26%</span></td><td><b>ボリンジャー−2σで逆張り</b> <span class="pos">+8%</span></td><td><b>ゴールデンクロス+200日線</b> <span class="neg">−3%</span></td></tr>
+      <tr><td><span class="rank">2</span></td><td>ナンピン(上限あり・信用なし) <span class="pos">+23%</span></td><td>RSIで逆張り <span class="pos">+7%</span></td><td>MACD+200日線 <span class="neg">−3%</span></td></tr>
+      <tr><td><span class="rank">3</span></td><td>暴落した時に買い増すルール <span class="pos">+19%</span></td><td>MACD+200日線 <span class="pos">+4%</span></td><td>ボリンジャー−2σで逆張り <span class="neg">−4%</span></td></tr>
+      <tr><td><span class="rank">4</span></td><td>200日線(月末に判定) <span class="pos">+17%</span></td><td>ナンピン <span class="pos">+3%</span></td><td>200日線(月末に判定) <span class="neg">−4%</span></td></tr>
+      <tr><td class="muted">最下位</td><td class="muted">逆張り系 +5〜7%</td><td class="muted">順張り系 −2〜−5%</td><td class="muted">買ってずっと持つ −22%</td></tr>
+    </table></div>
+    <ul class="ng" style="margin-top:.6rem">
+      <li><b>上昇の年</b>:ずっと持つのが一番。売り買いするほど上昇を取り逃がす。</li>
+      <li><b>レンジの年</b>:下がったら買う逆張りが勝つ。</li>
+      <li><b>下落の年</b>:早く売る手法ほど損が小さい。</li>
     </ul>
-    <div class="disc">条件:日経平均の終値で判定し翌日の終値で売買、往復コスト0.1%、配当なし、現金の利息なし。条件を14通り動かしても年率+4.1〜5.8%・最大下落−32〜−43%。詳細はリポジトリの reports/index_crash_rulebook.md。</div>
+    <h3>ただし、相場の種類は年が終わるまでわからない</h3>
+    <ul class="ng">
+      <li>前の年の相場から、今年の相場はほとんど予想できなかった(上昇の翌年も、上昇とレンジがほぼ半々)。</li>
+      <li>その時点で見分けて手法を切り替える方法は、当たりが半分ほどで、利益はほとんど増えなかった。</li>
+      <li>だから<b>相場を予想して手法を変えるより、1つの手法を続ける方が良い</b>。</li>
+    </ul>
+  </section>
+
+  <!-- ============ NG ============ -->
+  <section class="card">
+    <h2>やってはいけないこと(検証で負けがはっきりしたもの)</h2>
+    <div class="scroll"><table>
+      <tr><th>やってはいけないこと</th><th>検証の結果</th></tr>
+      <tr><td>出来高が急増した注目株を買う(決算以外で+5%の窓上げ+出来高3倍)</td><td class="num neg">年率 −38%</td></tr>
+      <tr><td>上方修正が出た翌朝に買う</td><td class="num neg">年率 −16%</td></tr>
+      <tr><td>急騰した株、かつ出来高急増の株を買う</td><td class="num neg">年率 +3%(全銘柄の均等保有は +14%)</td></tr>
+      <tr><td>個別株をゴールデンクロス・MACDで買う</td><td class="num neg">年率 −1%</td></tr>
+      <tr><td>直近1か月で一番下がった業種を買う</td><td class="num neg">年率 −6%</td></tr>
+      <tr><td>下がった株にナンピンし、信用取引で買い増す</td><td class="num neg">退場した人の典型</td></tr>
+    </table></div>
   </section>
 
   <section class="card">
     <div class="disc">
-      このページは、検証したルールとその状態を表示するもので、投資助言ではありません。判定は毎朝、1995年からの日経平均の終値でルールを再生して求めています(Yahoo Finance のデータ)。データの誤り・遅延の可能性があります。過去の成績は将来を保証しません。
+      過去のデータでの検証で、将来も同じ結果になるとは限りません。個別の投資助言ではありません。「今のTOPIX」は毎朝、ETF 1305の終値から計算しています(Yahoo Finance のデータ。誤り・遅延の可能性があります)。暴落した時に買い増すルール(2位)の売買手順は、リポジトリの reports/index_crash_rulebook.md にあります。
     </div>
   </section>
 </div>
 
 <script>
-const LABELS = {B: "B 乖離−10%", C: "C 高値−15%"};
-const SHORT = {B: "B", C: "C"};
 const pct = (v, d = 1) => v == null ? "—" : (v >= 0 ? "+" : "") + (v * 100).toFixed(d) + "%";
 const num = v => v == null ? "—" : Math.round(v).toLocaleString();
 const cls = v => v == null ? "" : v >= 0 ? "pos" : "neg";
 
 function renderState(st) {
-  const diff = st.target_units - st.current_units;
-  let action;
-  if (diff > 0) action = `<div class="action buy">🔔 本日の引けで <b>${diff}ユニット買い</b>(${st.current_units}→${st.target_units})</div>`;
-  else if (diff < 0) action = `<div class="action sell">🔔 本日の引けで <b>${-diff}ユニット売り</b>(${st.current_units}→${st.target_units})</div>`;
-  else action = `<div class="action hold">✅ 売買なし(ルール上の保有 ${st.current_units}/3ユニット)</div>`;
-
-  const reasons = [];
-  if (st.trend_was_on != null && st.trend_on !== st.trend_was_on)
-    reasons.push("T 200日線を" + (st.trend_on ? "上抜け(オン)" : "割り込み(オフ)"));
-  (st.entries || []).forEach(k => reasons.push(`${LABELS[k]} 点灯`));
-  (st.exits || []).forEach(e => reasons.push(`${LABELS[e.kind]}(${e.entry_date}買い)手仕舞い`));
-
-  const exiting = new Set((st.exits || []).map(e => e.kind + e.entry_date));
-  const pos = (st.positions || []).map(p => `<tr>
-      <td><b>${SHORT[p.kind]}</b></td><td>${p.entry_date}</td><td class="num">${num(p.entry_close)}</td>
-      <td class="num ${cls(p.ret)}">${pct(p.ret)}</td><td class="num">${p.sessions}</td>
-      <td class="num">${exiting.has(p.kind + p.entry_date) ? "<b>本日の引けで</b>" : "最長" + p.sessions_left + "日"}</td></tr>`).join("");
-
-  const trades = (st.recent_trades || []).slice().reverse().map(t => `<tr>
-      <td><b>${SHORT[t.kind]}</b></td><td>${t.entry}</td><td>${t.exit}</td><td class="num ${cls(t.ret)}">${pct(t.ret)}</td></tr>`).join("");
-
+  const above = st.ma200_dev != null ? st.ma200_dev > 0 : st.trend_on;
   document.getElementById("state").innerHTML = `
-    ${action}
-    ${reasons.length ? `<div style="margin:-.3rem 0 .6rem">理由:${reasons.join(" / ")}</div>` : ""}
     <div class="kpis">
-      <div class="kpi"><div class="l">日経平均(${st.asof})</div><div class="v">${num(st.close)} <span class="${cls(st.day_ret)}" style="font-size:.85rem">${pct(st.day_ret)}</span></div></div>
-      <div class="kpi"><div class="l">T 200日線との差</div><div class="v">${pct(st.ma200_dev)} <span class="tag ${st.trend_on ? "on" : "off"}">${st.trend_on ? "オン" : "オフ"}</span></div></div>
-      <div class="kpi"><div class="l">B 25日線乖離(基準 −10%)</div><div class="v">${pct(st.ma25_dev)}</div></div>
-      <div class="kpi"><div class="l">C 250日高値から(基準 −15%)</div><div class="v">${pct(st.dd250)}</div></div>
+      <div class="kpi"><div class="l">TOPIX連動ETF 1305 終値(${st.asof})</div><div class="v">${num(st.close)}円 <span class="${cls(st.day_ret)}" style="font-size:.85rem">${pct(st.day_ret)}</span></div></div>
+      <div class="kpi"><div class="l">200日移動平均との差</div><div class="v">${pct(st.ma200_dev)} <span class="tag ${above ? "on" : "off"}">${above ? "上" : "下"}</span></div></div>
+      <div class="kpi"><div class="l">1年の高値から</div><div class="v">${pct(st.dd250)}</div></div>
     </div>
-    <div class="disc" style="margin-top:.6rem">更新:${st.generated_at || "—"}。前営業日(${st.asof})の終値で判定した、本日の引けで行う売買です。</div>`;
-
-  document.getElementById("history").innerHTML = `
-    <h3 style="margin-top:0">保有中(B・C)</h3>
-    ${pos ? `<div class="scroll"><table><tr><th>判定</th><th>買った日</th><th class="num">買値(日経)</th><th class="num">損益</th><th class="num">保有</th><th class="num">手仕舞いまで</th></tr>${pos}</table></div><div class="disc">保有・手仕舞いまでは営業日数(手仕舞いまでは本日を含む)。</div>`
-          : `<div class="muted">B・Cの保有なし${st.trend_on ? "(Tオンで3ユニット保有)" : ""}</div>`}
-    ${trades ? `<h3>最近の手仕舞い(B・C)</h3><div class="scroll"><table><tr><th>判定</th><th>買った日</th><th>売った日</th><th class="num">損益(日経)</th></tr>${trades}</table></div>` : ""}
-`;
-
-  const cu = document.getElementById("cu"), tu = document.getElementById("tu");
-  if (!localStorage.getItem("pb_cu")) cu.value = st.current_units;
-  tu.value = st.target_units;
-  calc();
+    <div style="margin-top:.4rem">${above
+      ? "200日線より<b>上</b>。月末にこのままなら、持ち続ける。"
+      : "200日線より<b>下</b>。月末にこのままなら、200日線のルールを使う人は売って現金にする(ずっと持つ人は何もしない)。"}</div>
+    <div class="disc" style="margin-top:.4rem">更新:${st.generated_at || "—"}。判断に使うのは月末の終値だけ。</div>`;
 }
-
-function calc() {
-  const g = id => parseFloat(document.getElementById(id).value);
-  ["cap", "px", "sh", "cu"].forEach(id => localStorage.setItem("pb_" + id, document.getElementById(id).value));
-  const cap = g("cap"), px = g("px"), sh = g("sh") || 0, cu = g("cu") || 0, tu = g("tu");
-  const out = document.getElementById("calcOut");
-  if (!(cap > 0) || !(px > 0) || isNaN(tu)) { out.textContent = "口座評価額とETFの価格を入れてください。"; return; }
-  const unitYen = cap / 3;
-  const perUnit = Math.floor(unitYen / px);
-  let msg = `1ユニット ≈ ${num(unitYen)}円(${perUnit}口)。`;
-  if (perUnit < 1) msg += " ⚠️ 1ユニットで1口も買えません。資金かETFを見直してください。";
-  const d = tu - cu;
-  if (d > 0) msg += ` → <b>引成で ${Math.floor(unitYen * d / px)}口 買い</b>`;
-  else if (d < 0 && tu > 0 && cu <= 0) msg += " → 今の保有ユニット数を入れてください";
-  else if (d < 0) msg += ` → <b>引成で ${tu <= 0 ? sh : Math.round(sh * (-d) / cu)}口 売り</b>`;
-  else msg += " → 売買なし";
-  out.innerHTML = msg;
-}
-
-["cap", "px", "sh", "cu"].forEach(id => { const v = localStorage.getItem("pb_" + id); if (v !== null && v !== "") document.getElementById(id).value = v; });
-["cap", "px", "sh", "cu", "tu"].forEach(id => document.getElementById(id).addEventListener("input", calc));
 
 if (window.__CR__) renderState(window.__CR__);
 else fetch("./crash_rules.json").then(r => r.ok ? r.json() : Promise.reject(r.status)).then(renderState)
-  .catch(() => { document.getElementById("state").innerHTML = `<div class="empty">ルールの状態がまだありません(朝の処理の実行後に表示されます)。Discordの「🛡 指数ルール」を見てください。</div>`; document.getElementById("history").innerHTML = `<div class="empty">—</div>`; calc(); });
+  .catch(() => { document.getElementById("state").innerHTML = `<div class="empty">データがまだありません(朝の処理の実行後に表示されます)。</div>`; });
 </script>
 </body>
 </html>
