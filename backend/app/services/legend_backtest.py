@@ -184,7 +184,8 @@ def _trades_for_stock(code: str, o, h, l, c, v, va, dates, rs, start_i: int) -> 
         if not (entry > 0 and exit_px > 0):
             return
         out[key].append((dates[ent_i], dates[exit_i], code, float(exit_px / entry - 1),
-                         int(exit_i - ent_i + 1), float(rs[ent_i - 1]) if ent_i > 0 else np.nan))
+                         int(exit_i - ent_i + 1), float(rs[ent_i - 1]) if ent_i > 0 else np.nan,
+                         float(entry), float(exit_px)))
 
     def exit_open(j):
         # sell at the next open after the exit signal; if the data ends (delisting), last close
@@ -257,7 +258,8 @@ def build_trades(panel: dict[str, pd.DataFrame]) -> tuple[dict[str, pd.DataFrame
             all_tr[key].extend(lst)
         if k % 500 == 0:
             logger.info("signals: %d / %d codes", k, close.shape[1])
-    frames = {k: pd.DataFrame(v, columns=["entry", "exit", "code", "ret", "bars", "rs"]) for k, v in all_tr.items()}
+    frames = {k: pd.DataFrame(v, columns=["entry", "exit", "code", "ret", "bars", "rs", "entry_px", "exit_px"])
+              for k, v in all_tr.items()}
     return frames, rs
 
 
@@ -301,7 +303,10 @@ def _trade_stats(t: pd.DataFrame, bench: pd.Series, split: pd.Timestamp) -> dict
 
 def _portfolio(t: pd.DataFrame, panel: dict[str, pd.DataFrame], cal: pd.DatetimeIndex,
                priority: str = "rs", seed: int = 1) -> pd.Series:
-    opn, close = panel["open"], panel["close"]
+    """Equal-slot portfolio that fills each trade at the trade's own entry/exit prices
+    (so rules that enter at the close, or exit at a close, are not re-priced at the open
+    — re-pricing an "enter at the close if close > open" rule at the open is look-ahead)."""
+    close = panel["close"]
     if t.empty:
         return pd.Series(1.0, index=cal)
     t = t.copy()
@@ -309,33 +314,31 @@ def _portfolio(t: pd.DataFrame, panel: dict[str, pd.DataFrame], cal: pd.Datetime
         t["rs"] = np.random.default_rng(seed).random(len(t))
     t = t.sort_values(["entry", "rs"], ascending=[True, False])
     groups = {d: g for d, g in t.groupby("entry")}
-    cash, pos, eq = 1.0, {}, []
+    cash, eq = 1.0, []
+    pos: dict[str, tuple[float, pd.Timestamp, float]] = {}  # code -> (shares, exit date, exit price)
     last_px: dict[str, float] = {}
     for d in cal:
-        for code in [c for c, (_, xd) in pos.items() if xd <= d]:
-            sh, _ = pos.pop(code)
-            p = opn.at[d, code] if code in opn.columns else np.nan
-            if not (p > 0):
-                p = last_px.get(code, 0.0)
-            cash += sh * p * (1 - COST / 2)
+        for code in [c for c, (_, xd, _) in pos.items() if xd <= d]:
+            sh, _, xp = pos.pop(code)
+            cash += sh * xp * (1 - COST / 2)
         if d in groups:
-            val = cash + sum(sh * last_px.get(c, 0.0) for c, (sh, _) in pos.items())
+            val = cash + sum(sh * last_px.get(c, 0.0) for c, (sh, _, _) in pos.items())
             for _, r in groups[d].iterrows():
                 if len(pos) >= SLOTS or r.code in pos:
                     continue
-                p = opn.at[d, r.code]
-                if not (p > 0):
+                if not (r.entry_px > 0 and r.exit_px > 0):
                     continue
                 amt = min(val / SLOTS, cash)
                 if amt <= 0:
                     break
-                pos[r.code] = (amt * (1 - COST / 2) / p, r.exit)
+                pos[r.code] = (amt * (1 - COST / 2) / r.entry_px, r.exit, float(r.exit_px))
+                last_px[r.code] = float(r.entry_px)
                 cash -= amt
         for c in pos:
             p = close.at[d, c]
             if p > 0:
                 last_px[c] = float(p)
-        eq.append(cash + sum(sh * last_px.get(c, 0.0) for c, (sh, _) in pos.items()))
+        eq.append(cash + sum(sh * last_px.get(c, 0.0) for c, (sh, _, _) in pos.items()))
     return pd.Series(eq, index=cal)
 
 
