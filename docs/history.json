@@ -476,8 +476,8 @@
 "computed_at": "2026-11-11 08:26 JST",
 "late": false,
 "futures_method": "daily_close",
-"actual_move": null,
-"hit": null
+"actual_move": 0.001087051188384388,
+"hit": false
 },
 {
 "date": "2026-11-12",
@@ -485,6 +485,16 @@
 "expected_move": 0.015874450385730807,
 "computed_at": "2026-11-12 09:48 JST",
 "late": true,
+"futures_method": "daily_close",
+"actual_move": null,
+"hit": null
+},
+{
+"date": "2026-11-13",
+"direction": "UP",
+"expected_move": 0.002758606331211679,
+"computed_at": "2026-11-13 08:42 JST",
+"late": false,
 "futures_method": "daily_close",
 "actual_move": null,
 "hit": null
