@@ -34,6 +34,7 @@ DOCS_DIR = REPO_ROOT / "docs"
 HISTORY_FILE = DOCS_DIR / "history.json"
 TEMPLATE = BACKEND_DIR / "app" / "static" / "dashboard.html"
 PORTFOLIO_TEMPLATE = BACKEND_DIR / "app" / "static" / "portfolio.html"
+PLAYBOOK_TEMPLATE = BACKEND_DIR / "app" / "static" / "playbook.html"
 
 DIRECTION_EMOJI = {
     "STRONG_UP": "🚀",
@@ -310,7 +311,19 @@ def crash_rules_block() -> str:
                                                    encoding="utf-8")
         logger.info("Crash rules: %d -> %d units (T %s)", st["current_units"],
                     st["target_units"], "on" if st["trend_on"] else "off")
+    render_playbook(st)
     return crash_rules.format_section(st)
+
+
+def render_playbook(st: dict | None) -> None:
+    """docs/playbook.html: the rulebook, the execution procedure and today's state.
+    Without a fresh state the page falls back to the last docs/crash_rules.json."""
+    html = PLAYBOOK_TEMPLATE.read_text(encoding="utf-8")
+    if st:
+        html = html.replace("</head>", "<script>window.__CR__ = " + json.dumps(st, ensure_ascii=False)
+                            + ";</script>\n</head>", 1)
+    DOCS_DIR.mkdir(parents=True, exist_ok=True)
+    (DOCS_DIR / "playbook.html").write_text(html, encoding="utf-8")
 
 
 def main() -> int:
@@ -328,7 +341,8 @@ def main() -> int:
     # which would otherwise blank the URL.
     dashboard_url = os.environ.get("DASHBOARD_URL") or "https://homoiri119.github.io/market-outlook/"
     footer = (f"\n\n━━━━━━━━━━━\n🔗 **ダッシュボード**: {dashboard_url}\n"
-              "└ アウトルック / 個別銘柄 / ニュース / 💼実績\n└ 戦略検証 / バックテスト / セクター / 🆕IPO")
+              "└ アウトルック / 個別銘柄 / ニュース / 💼実績\n└ 戦略検証 / バックテスト / セクター / 🆕IPO\n"
+              f"🛡 **プレイブック**: {dashboard_url.rstrip('/')}/playbook.html")
     top, note = rank_candidates(outlook)
     late = ("⚠️ **配信遅延:寄り付き後の通知です**(GitHubの起動遅れ。予想値は前日までの確定データで計算済み)\n"
             if outlook.get("late") else "")

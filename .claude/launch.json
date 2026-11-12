@@ -5,6 +5,12 @@
       "name": "backend",
       "port": 8000,
       "url": "http://localhost:8000"
+    },
+    {
+      "name": "docs",
+      "runtimeExecutable": "backend/.venv/Scripts/python.exe",
+      "runtimeArgs": ["-m", "http.server", "8765", "--directory", "docs"],
+      "port": 8765
     }
   ]
 }
