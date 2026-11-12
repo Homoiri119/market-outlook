@@ -39,7 +39,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add reports/inverse_backtest_*.md reports/inverse_backtest_results.json reports/catalyst_backtest_*.md reports/catalyst_backtest_results.json
+          git add reports/inverse_backtest_*.md reports/inverse_backtest_results.json reports/catalyst_backtest_*.md reports/catalyst_backtest_results.json reports/combo_backtest_*.md reports/combo_backtest_results.json
           if git diff --staged --quiet; then
             echo "No changes to commit."
           else

@@ -2,9 +2,10 @@
 
   1. The inverse of losing methods (app/services/inverse_backtest.py)
   2. Picks with a reason: catalysts and themes (app/services/catalyst_backtest.py)
+  3. Popular entries (golden cross, MACD, volume surge) with filters (combo_backtest.py)
 
 Run from repo root:  python backend/scripts/run_inverse_backtest.py
-Writes reports/inverse_backtest_<date>.md, reports/catalyst_backtest_<date>.md and their
+Writes reports/{inverse,combo,catalyst}_backtest_<date>.md and their
 *_results.json. Requires JQUANTS_API_KEY. Fetches ~3.8 years of bars-by-date (one call
 per trading day) plus financial disclosures by date, so it is a heavy, occasional batch.
 """
@@ -23,6 +24,7 @@ if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
 from app.services import catalyst_backtest as cb  # noqa: E402
+from app.services import combo_backtest as co  # noqa: E402
 from app.services import inverse_backtest as ib  # noqa: E402
 from app.services import legend_backtest as lb  # noqa: E402
 
@@ -51,6 +53,10 @@ def main() -> int:
     res = ib.run_on_panel(panel, bench)
     res["generated_at"] = gen
     _write("inverse_backtest", res, ib.render_markdown(res, gen), stamp)
+
+    res3 = co.run_on_panel(panel, bench)
+    res3["generated_at"] = gen
+    _write("combo_backtest", res3, co.render_markdown(res3, gen), stamp)
 
     dates = [d.date() for d in panel["close"].index]
     disc, fins_info = cb.fetch_disclosures(dates)
