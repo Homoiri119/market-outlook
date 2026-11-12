@@ -45,7 +45,11 @@ MIN_TURNOVER = 100_000_000    # ¥100M 20-day average turnover at signal time (t
 COST = 0.002                  # round-trip cost per trade
 SLOTS = 10                    # concurrent positions in the portfolio simulation
 RETRY_WAITS = (5, 15, 30, 60, 120, 180)  # seconds; J-Quants 429s lasted minutes in run #2
-STRATEGIES = ["turtle55", "duke52", "minervini", "cis_vol", "bnf_dev", "bnf_small", "ep"]
+STRATEGIES = ["turtle55", "duke52", "minervini", "cis_vol", "bnf_dev", "bnf_small", "ep",
+              "tbc_t", "tbc_b", "tbc_c"]
+# Pooled strategies evaluated in one portfolio (their trades compete for the same slots).
+COMBOS = {"tbc": ["tbc_t", "tbc_b", "tbc_c"]}
+TBC_C_HOLD = 120             # sessions; index rulebook v1 applied to each stock
 LABELS = {
     "turtle55": "タートル(55日高値ブレイク)",
     "duke52": "DUKE。(52週高値ブレイク)",
@@ -54,6 +58,10 @@ LABELS = {
     "bnf_dev": "BNF(25日線乖離−20%の逆張り)",
     "bnf_small": "BNF(売買代金急増+値上がりの順張り)",
     "ep": "クラマギー(EP:+10%の窓)",
+    "tbc_t": "個別株T(200日線を上抜け→割れたら売り)",
+    "tbc_b": "個別株B(25日線乖離−10%→25日線回復 or 20日)",
+    "tbc_c": "個別株C(250日高値から−15%→120日保有)",
+    "tbc": "個別株T+B+C(1つの口座で併用)",
 }
 
 
@@ -246,7 +254,54 @@ def _trades_for_stock(code: str, o, h, l, c, v, va, dates, rs, start_i: int) -> 
         if c[i - 1] > 0 and o[i] / c[i - 1] - 1 >= 0.10 and v[i] > 3 * v50[i] and c[i] > o[i]:
             j = run(i, c[i], l[i], ma=ma10, maxh=60)
             rec("ep", i, c[i], *exit_open(j))
+    _tbc_trades(c, ma25, ma200, hi250, va20, max(start_i, WARMUP_BARS), rec)
     return out
+
+
+def _tbc_trades(c, ma25, ma200, hi250, va20, start: int, rec) -> None:
+    """Index rulebook v1 (T/B/C) applied to one stock, with the rulebook's timing:
+    decide on close i, trade at close i+1 (引成); MA exits seen on close j fill at
+    close j+1; time exits fill at the close of the due session. B and C fire once per
+    episode (re-armed at dev >= 0 / within -5% of the 250-day high)."""
+    n = len(c)
+
+    def close_at(k):  # delisted before the fill -> last close
+        k = min(k, n - 1)
+        return k, c[k]
+
+    arm_b = arm_c = True
+    t_open_until = -1  # index after which a new T entry may start (no overlapping T)
+    for i in range(1, n - 1):
+        dev = c[i] / ma25[i] - 1 if ma25[i] > 0 else np.nan
+        dd = c[i] / hi250[i] - 1 if hi250[i] > 0 else np.nan
+        fire_b = arm_b and dev <= -0.10
+        fire_c = arm_c and dd <= -0.15
+        if fire_b:
+            arm_b = False
+        elif not arm_b and dev >= 0:
+            arm_b = True
+        if fire_c:
+            arm_c = False
+        elif not arm_c and dd >= -0.05:
+            arm_c = True
+        if i < start or not (va20[i] >= MIN_TURNOVER) or not (c[i] > 0):
+            continue
+        e = i + 1
+        # T: close crosses above the 200-day MA; sell the session after a close <= MA200
+        if i > t_open_until and c[i] > ma200[i] and c[i - 1] <= ma200[i - 1]:
+            j = e
+            while j < n - 1 and c[j] > ma200[j]:
+                j += 1
+            x, px = close_at(j + 1) if j < n - 1 else (n - 1, c[n - 1])
+            rec("tbc_t", e, c[e], x, px)
+            t_open_until = x
+        if fire_b:
+            j = e + 1
+            while j < n - 1 and j - e < 20 and not (c[j - 1] >= ma25[j - 1] and j - 1 > e):
+                j += 1
+            rec("tbc_b", e, c[e], *close_at(j))
+        if fire_c:
+            rec("tbc_c", e, c[e], *close_at(e + TBC_C_HOLD))
 
 
 def build_trades(panel: dict[str, pd.DataFrame]) -> tuple[dict[str, pd.DataFrame], pd.DataFrame]:
@@ -398,7 +453,9 @@ def run_on_panel(panel: dict[str, pd.DataFrame], bench: pd.Series) -> dict:
         "baselines": {"topix": _curve_stats(bench_curve), "equal_weight": _curve_stats(ew_curve)},
         "strategies": {},
     }
-    for key in STRATEGIES:
+    for key, parts in COMBOS.items():
+        trades[key] = pd.concat([trades[p] for p in parts], ignore_index=True)
+    for key in STRATEGIES + list(COMBOS):
         t = trades[key]
         t = t[t["entry"] >= cal[0]]
         logger.info("%s: %d trades", key, len(t))

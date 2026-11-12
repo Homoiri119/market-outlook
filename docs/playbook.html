@@ -67,12 +67,6 @@
   </header>
   <div class="sub">売買するのは日経225連動ETFだけ。判断は日経平均の終値、注文は翌営業日の引成。迷ったら、このページに書いてあることだけをする。</div>
 
-  <!-- ============ 今日やること ============ -->
-  <section class="card" id="today">
-    <h2>📌 今日やること</h2>
-    <div id="state"><div class="empty">読み込み中...</div></div>
-  </section>
-
   <!-- ============ ルール ============ -->
   <section class="card">
     <h2>1. ルール</h2>
@@ -112,6 +106,12 @@
       <tr><td>ルールの変更</td><td>年1回まで。理由を書き残し、過去の売買はやり直さない</td></tr>
       <tr><td>裁量の禁止</td><td>ニュース・相場観・含み損益を理由に、通知と違う売買をしない</td></tr>
     </table>
+  </section>
+
+  <!-- ============ 今日やること ============ -->
+  <section class="card" id="today">
+    <h2>📌 今日やること</h2>
+    <div id="state"><div class="empty">読み込み中...</div></div>
   </section>
 
   <!-- ============ 手順 ============ -->
@@ -194,9 +194,15 @@
     <div class="disc" style="margin-top:.4rem">入力はこの端末のブラウザにだけ保存されます(送信しません)。</div>
   </section>
 
+  <!-- ============ 保有・履歴 ============ -->
+  <section class="card">
+    <h2>5. ルール上の保有と売買履歴</h2>
+    <div id="history"><div class="empty">読み込み中...</div></div>
+  </section>
+
   <!-- ============ 期待値 ============ -->
   <section class="card">
-    <h2>5. 想定される成績と、このルールの性格</h2>
+    <h2>6. 想定される成績と、このルールの性格</h2>
     <table>
       <tr><th>日経平均 2000〜2026年</th><th class="num">年率</th><th class="num">最大下落</th><th class="num">平均の投資比率</th></tr>
       <tr><td>買って持つだけ</td><td class="num">+4.5%</td><td class="num neg">−66%</td><td class="num">100%</td></tr>
@@ -257,11 +263,14 @@ function renderState(st) {
       <div class="kpi"><div class="l">B 25日線乖離(基準 −10%)</div><div class="v">${pct(st.ma25_dev)}</div></div>
       <div class="kpi"><div class="l">C 250日高値から(基準 −15%)</div><div class="v">${pct(st.dd250)}</div></div>
     </div>
-    <h3>ルール上の保有(B・C)</h3>
+    <div class="disc" style="margin-top:.6rem">更新:${st.generated_at || "—"}。前営業日(${st.asof})の終値で判定した、本日の引けで行う売買です。</div>`;
+
+  document.getElementById("history").innerHTML = `
+    <h3 style="margin-top:0">保有中(B・C)</h3>
     ${pos ? `<div class="scroll"><table><tr><th>判定</th><th>買った日</th><th class="num">買値(日経)</th><th class="num">損益</th><th class="num">保有</th><th class="num">手仕舞いまで</th></tr>${pos}</table></div><div class="disc">保有・手仕舞いまでは営業日数(手仕舞いまでは本日を含む)。</div>`
           : `<div class="muted">B・Cの保有なし${st.trend_on ? "(Tオンで3ユニット保有)" : ""}</div>`}
     ${trades ? `<h3>最近の手仕舞い(B・C)</h3><div class="scroll"><table><tr><th>判定</th><th>買った日</th><th>売った日</th><th class="num">損益(日経)</th></tr>${trades}</table></div>` : ""}
-    <div class="disc" style="margin-top:.6rem">更新:${st.generated_at || "—"}。前営業日(${st.asof})の終値で判定した、本日の引けで行う売買です。</div>`;
+`;
 
   const cu = document.getElementById("cu"), tu = document.getElementById("tu");
   if (!localStorage.getItem("pb_cu")) cu.value = st.current_units;
@@ -292,7 +301,7 @@ function calc() {
 
 if (window.__CR__) renderState(window.__CR__);
 else fetch("./crash_rules.json").then(r => r.ok ? r.json() : Promise.reject(r.status)).then(renderState)
-  .catch(() => { document.getElementById("state").innerHTML = `<div class="empty">ルールの状態がまだありません(朝の処理の実行後に表示されます)。Discordの「🛡 指数ルール」を見てください。</div>`; calc(); });
+  .catch(() => { document.getElementById("state").innerHTML = `<div class="empty">ルールの状態がまだありません(朝の処理の実行後に表示されます)。Discordの「🛡 指数ルール」を見てください。</div>`; document.getElementById("history").innerHTML = `<div class="empty">—</div>`; calc(); });
 </script>
 </body>
 </html>
