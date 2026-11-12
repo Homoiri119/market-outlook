@@ -44,6 +44,7 @@ WARMUP_BARS = 250             # 52-week indicators need this many bars before si
 MIN_TURNOVER = 100_000_000    # ¥100M 20-day average turnover at signal time (tradable)
 COST = 0.002                  # round-trip cost per trade
 SLOTS = 10                    # concurrent positions in the portfolio simulation
+RETRY_WAITS = (5, 15, 30, 60, 120, 180)  # seconds; J-Quants 429s lasted minutes in run #2
 STRATEGIES = ["turtle55", "duke52", "minervini", "cis_vol", "bnf_dev", "bnf_small", "ep"]
 LABELS = {
     "turtle55": "タートル(55日高値ブレイク)",
@@ -77,33 +78,50 @@ def fetch_panel(lookback_days: int = LOOKBACK_DAYS, sleep: float = 0.15) -> dict
     masters taken at several dates (so delisted stocks are still classified)."""
     end = dt.date.today()
     start = end - dt.timedelta(days=lookback_days)
+    # Trading calendar from TOPIX (one call), so an empty response on a calendar day is
+    # an error (e.g. HTTP 429), never a holiday. Run #2 silently lost 54 days that way.
+    topix = jquants_client.fetch_topix_history(start, end)
+    calendar = sorted(pd.to_datetime(topix.index).date) if not topix.empty else []
+    if not calendar:
+        raise RuntimeError("TOPIX calendar unavailable (plan/credentials?)")
     recs: list[tuple] = []
-    d, n_days = start, 0
-    while d <= end:
-        if d.weekday() < 5:
-            rows = jquants_client.fetch_quotes_by_date(d)
-            if not rows:  # holiday, or a transient error / rate limit -> retry once
-                time.sleep(2.0)
-                rows = jquants_client.fetch_quotes_by_date(d)
+    missing: list[dt.date] = []
+    for n_days, d in enumerate(calendar, 1):
+        rows = jquants_client.fetch_quotes_by_date(d)
+        # Before the first non-empty day we may simply be outside the plan's horizon:
+        # retry briefly and skip. After it, back off on rate limits / transient errors.
+        waits = RETRY_WAITS if recs else (2.0,)
+        for wait in waits:
             if rows:
-                n_days += 1
-                for r in rows:
-                    code = str(r.get("Code") or "")
-                    if not code:
-                        continue
-                    o = _num(r, "AdjO", "AdjustmentOpen", "O")
-                    h = _num(r, "AdjH", "AdjustmentHigh", "H")
-                    lo = _num(r, "AdjL", "AdjustmentLow", "L")
-                    c = _num(r, "AdjC", "AdjustmentClose", "C")
-                    v = _num(r, "AdjVo", "AdjustmentVolume", "Vo")
-                    va = _num(r, "Va", "TurnoverValue")
-                    if np.isnan(va) and not (np.isnan(c) or np.isnan(v)):
-                        va = c * v
-                    recs.append((d, code, o, h, lo, c, v, va))
-                if n_days % 50 == 0:
-                    logger.info("fetched %d trading days (at %s, %d rows so far)", n_days, d, len(recs))
-            time.sleep(sleep)
-        d += dt.timedelta(days=1)
+                break
+            logger.info("no bars for %s; retrying in %.0fs", d, wait)
+            time.sleep(wait)
+            rows = jquants_client.fetch_quotes_by_date(d)
+        if not rows and recs:
+            missing.append(d)
+        for r in rows:
+            code = str(r.get("Code") or "")
+            if not code:
+                continue
+            o = _num(r, "AdjO", "AdjustmentOpen", "O")
+            h = _num(r, "AdjH", "AdjustmentHigh", "H")
+            lo = _num(r, "AdjL", "AdjustmentLow", "L")
+            c = _num(r, "AdjC", "AdjustmentClose", "C")
+            v = _num(r, "AdjVo", "AdjustmentVolume", "Vo")
+            va = _num(r, "Va", "TurnoverValue")
+            if np.isnan(va) and not (np.isnan(c) or np.isnan(v)):
+                va = c * v
+            recs.append((d, code, o, h, lo, c, v, va))
+        if n_days % 50 == 0:
+            logger.info("fetched %d/%d trading days (at %s, %d rows so far)",
+                        n_days, len(calendar), d, len(recs))
+        time.sleep(sleep)
+    if missing and missing[-1] == calendar[-1]:
+        missing.pop()  # today's bars may not be published yet
+    if missing:
+        # A gap distorts every signal and exit around it, so fail instead of reporting.
+        raise RuntimeError(f"bars-by-date missing for {len(missing)} trading days: "
+                           f"{', '.join(map(str, missing[:20]))}")
     if not recs:
         raise RuntimeError("No bars-by-date returned (plan/credentials?)")
 
