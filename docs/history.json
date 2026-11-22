@@ -536,8 +536,8 @@
 "computed_at": "2026-11-19 09:26 JST",
 "late": true,
 "futures_method": "daily_close",
-"actual_move": null,
-"hit": null
+"actual_move": 1.5420031057133795e-05,
+"hit": false
 },
 {
 "date": "2026-11-20",
@@ -545,6 +545,16 @@
 "expected_move": -0.02821839667866999,
 "computed_at": "2026-11-20 09:40 JST",
 "late": true,
+"futures_method": "daily_close",
+"actual_move": -0.015016640471324281,
+"hit": true
+},
+{
+"date": "2026-11-23",
+"direction": "STRONG_DOWN",
+"expected_move": -0.014032916814304998,
+"computed_at": "2026-11-23 08:39 JST",
+"late": false,
 "futures_method": "daily_close",
 "actual_move": null,
 "hit": null
