@@ -578,5 +578,15 @@
 "futures_method": "daily_close",
 "actual_move": null,
 "hit": null
+},
+{
+"date": "2026-11-26",
+"direction": "STRONG_DOWN",
+"expected_move": -0.009939760699192682,
+"computed_at": "2026-11-26 10:50 JST",
+"late": true,
+"futures_method": "daily_close",
+"actual_move": null,
+"hit": null
 }
 ]
